@@ -78,6 +78,7 @@ def load_policy(checkpoint, observation_space, action_space):
 `load_your_model` and the other placeholders are functions you implement.
 The evaluator loads the adapter after Isaac Sim starts, so you can import Torch or other model dependencies inside it.
 Outputs must pass shape, range, and finiteness checks (no NaN or infinity). Clip your model's outputs to the valid range in your adapter.
+Inference time counts against the episode time limit: each step costs 0.05 s of simulation time plus the time your policy call took, and the episode ends once the total passes `--seconds`.
 The policy only receives public observations. Do not bypass this by reading other simulator APIs in the same process.
 
 ## 3. Local evaluation

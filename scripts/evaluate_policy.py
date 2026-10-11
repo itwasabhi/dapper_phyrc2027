@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import time
 
 ROOT = Path('/project') if Path('/project/src/PhyRC_Sim').is_dir() else Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src/PhyRC_Sim'))
@@ -66,12 +67,15 @@ def main():
                 policy.reset()
             session.start(dict(metadata, seed=seed, human_spawn=info['human_spawn'], garment_spawn=info['garment_spawn'],
                                source_sha256=info['source_sha256'], source_commit=info['source_commit']))
+            elapsed = 0.0
             while True:
+                started = time.perf_counter()
                 action = np.asarray(policy(obs), dtype=np.float32)
+                elapsed += time.perf_counter() - started + 0.05
                 obs, _, terminated, truncated, info = env.step(action)
                 if not session.active:
                     raise RuntimeError(f'Evaluation measurement failed: {session.last_report}')
-                if terminated or truncated:
+                if terminated or truncated or elapsed >= args.seconds:
                     break
             report = session.finish(reason='policy_horizon')
             if not report['valid']:
