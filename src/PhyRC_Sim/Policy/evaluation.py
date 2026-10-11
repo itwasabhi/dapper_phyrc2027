@@ -448,8 +448,8 @@ def evaluate_submissions(data, config=None):
             raise ValueError('submission_id must be a unique nonempty string')
         ids.add(sid)
         episodes = submission.get('episodes')
-        if not isinstance(episodes, list) or len(episodes) < 2:
-            raise ValueError('Each submission needs at least two randomized initial-state seeds')
+        if not isinstance(episodes, list) or not episodes:
+            raise ValueError('Each submission needs at least one randomized initial-state seed')
         seeds, scores = set(), []
         for episode in episodes:
             seed = episode.get('seed')

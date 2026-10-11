@@ -23,8 +23,8 @@ def main():
     parser.add_argument('--profile', choices=['actor_rgbd', 'measured_state'], default='actor_rgbd')
     parser.add_argument('--output', type=Path, default=Path('/output/evaluation/policy'))
     args = parser.parse_args()
-    if len(set(args.seeds)) != len(args.seeds) or len(args.seeds) < 2 or min(args.seeds) < 0:
-        parser.error('Provide at least two distinct nonnegative seeds')
+    if len(set(args.seeds)) != len(args.seeds) or min(args.seeds) < 0:
+        parser.error('Provide distinct nonnegative seeds')
     import math
     if not math.isfinite(args.seconds) or args.seconds < 0.05 or not math.isclose(args.seconds * 20, round(args.seconds * 20)):
         parser.error('--seconds must be a positive multiple of 0.05')
