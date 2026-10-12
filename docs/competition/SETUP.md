@@ -16,7 +16,7 @@ You bring your own demonstrations and models.
 ## Requirements
 
 - An NVIDIA RTX GPU with a compatible driver. We tested on an RTX 5080 16 GB with 64 GB RAM on Ubuntu 22.04.
-- We recommend at least 32 GB RAM, a 16 GB-class GPU, and 100 GB of free SSD space. Long RGB-D recordings need more.
+- We recommend at least 32 GB RAM, a GPU with at least 12 GB of memory, and 100 GB of free SSD space. Long RGB-D recordings need more.
 - Check NVIDIA's [Isaac Sim 6.0.1 requirements](https://docs.isaacsim.omniverse.nvidia.com/6.0.1/installation/requirements.html) and use a driver that supports your GPU.
 - Internet access and admin rights to install packages.
 - The GUI steps below are for a local Linux desktop. CPU-only machines, WSL, and remote-desktop GUIs are outside what this guide was tested on.
@@ -130,6 +130,8 @@ To finish collecting, press `ESC` in the viewport and wait for `[Dataset export]
 | Symptom | What to check |
 |---|---|
 | Docker permission denied | Did you log out and back in after joining the docker group? |
+| `./run.sh build` fails with `archive/tar: invalid tar header` | New Docker 29.x installs use the containerd image store. Add `"features": {"containerd-snapshotter": false}` to `/etc/docker/daemon.json`, run `sudo systemctl restart docker`, and build again |
+| `nvidia-smi` cannot communicate with the NVIDIA driver | Secure Boot may be blocking the driver (`sudo modprobe nvidia` reports `Key was rejected by service`). Enroll the driver's MOK key at the next boot or disable Secure Boot |
 | GPU not visible in the container | NVIDIA Container Toolkit and the GPU check command above |
 | DISPLAY/Xauthority error | Local graphical session, running from a terminal in that session, xauth installed |
 | Run prepare first | Did `./run.sh prepare` finish? |
