@@ -100,7 +100,7 @@ This is not a trained dressing policy, so a score of 0 is expected. Evaluate you
   --seeds 42 43 --seconds 60 --output /output/evaluation/my_policy
 ```
 
-`--seconds` is the episode time limit in simulation time. `--seeds` picks random starting layouts; give one or more different seeds.
+`--seconds` is the episode time limit, counting simulation time plus your policy's own inference time. `--seeds` picks random starting layouts; give one or more different seeds.
 Observations default to `actor_rgbd`. For experiments that use only the allowed non-image state, run with `--profile measured_state`.
 Multi-seed evaluation requires randomization, so `--no-randomization` and `STRETCH4_RANDOMIZE=0` cannot be used here.
 
