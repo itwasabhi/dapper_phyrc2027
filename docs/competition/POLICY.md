@@ -109,7 +109,7 @@ Local practice scores are not the final judging. Running multiple environments i
 
 ## Preparing a submission
 
-Submit one `.zip` per round. Unzipped, it looks like this:
+Submit a `.zip` as often as you like before the deadline; only your last accepted submission is evaluated. Unzipped, it looks like this:
 
 ```text
 submission.zip
@@ -137,8 +137,8 @@ USER isaac-sim
 - Put all weights in the zip. Nothing is downloaded during evaluation.
 
 Each submission runs on one RTX 3090 (24 GB). The simulator uses about 10 GB of GPU memory, so keep your policy within 12 GB.
-Every team in a round gets the same hidden seeds, which change every round. Regular rounds use one seed and the final round uses three.
-The episode limit is 900 s, counting simulation time plus your policy's inference time. A submission whose image fails to build, or whose run crashes or produces no valid score, scores 0 for that round.
+The final evaluation runs every team's last submission on the same three hidden seeds. If compute allows, intermediate evaluations may be posted before the deadline; they have no fixed schedule and do not count toward the ranking.
+The episode limit is 900 s, counting simulation time plus your policy's inference time. A submission whose image fails to build, or whose run crashes or produces no valid score, scores 0.
 
 Before submitting, unzip your submission into `participant/` in a fresh clone and run the same command we run.
 If you included a `Dockerfile`, build it first and add `PHYRC_IMAGE=my-phyrc` in front of `./run.sh`:
