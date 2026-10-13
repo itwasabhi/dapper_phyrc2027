@@ -109,5 +109,47 @@ Local practice scores are not the final judging. Running multiple environments i
 
 ## Preparing a submission
 
+Submit one `.zip` per round. Unzipped, it looks like this:
+
+```text
+submission.zip
+├── policy.py          required, at the top level; defines load_policy(...)
+├── checkpoint.pt      optional; passed to load_policy as checkpoint
+├── Dockerfile         optional; only if you need extra packages
+└── ...                any other code or files your policy needs
+```
+
+- `checkpoint` is the file whose name starts with `checkpoint.`, or `None` if there is none. Load other files relative to `policy.py`, for example `Path(__file__).parent / 'encoder.pt'`.
+- To import your own modules, add the folder to the import path at the top of `policy.py`: `sys.path.insert(0, str(Path(__file__).parent))`.
+- If you need system or Python packages that are not in the official image, include a `Dockerfile` that extends it. We build it with your submission folder as the build context and evaluate in that image; without one, we use the official image.
+  The official image is `phyrc-2027:isaac-6.0.1`. It is not downloaded from anywhere: `./run.sh build` creates it on your machine from this repository's `Dockerfile` ([setup step 5](SETUP.md#5-build-the-environment)).
+  Run `./run.sh build` first; `docker image ls phyrc-2027` should then list it. Write your own `Dockerfile` in your submission folder; do not edit the repository's `Dockerfile`. Yours must start with `FROM phyrc-2027:isaac-6.0.1` and only add packages.
+  Do not reinstall `torch` or `torchvision`, or change the versions of packages already in the image.
+
+```dockerfile
+FROM phyrc-2027:isaac-6.0.1
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends <system packages>
+RUN /isaac-sim/python.sh -m pip install --no-cache-dir <package>==<version>
+USER isaac-sim
+```
+
+- Put all weights in the zip. Nothing is downloaded during evaluation.
+
+Each submission runs on one RTX 3090 (24 GB). The simulator uses about 10 GB of GPU memory, so keep your policy within 12 GB.
+Every team in a round gets the same hidden seeds, which change every round. Regular rounds use one seed and the final round uses three.
+The episode limit is 900 s, counting simulation time plus your policy's inference time. A submission whose image fails to build, or whose run crashes or produces no valid score, scores 0 for that round.
+
+Before submitting, unzip your submission into `participant/` in a fresh clone and run the same command we run.
+If you included a `Dockerfile`, build it first and add `PHYRC_IMAGE=my-phyrc` in front of `./run.sh`:
+
+```bash
+docker build -t my-phyrc participant
+./run.sh python /scripts/evaluate_policy.py \
+  --policy /project/participant/policy.py \
+  --checkpoint /project/participant/checkpoint.pt \
+  --seeds 42 --seconds 900 --output /output/evaluation/submission_check
+```
+
 Keep track of your code version, checkpoint, preprocessing and observation keys, library versions, data sources, and reproducible run commands like the ones above.
-Also record how you split train/validation episodes and how you selected successful demonstrations. Submission details and deadlines will be announced by the organizers.
+Also record how you split train/validation episodes and how you selected successful demonstrations. Round deadlines are announced on Codabench.
