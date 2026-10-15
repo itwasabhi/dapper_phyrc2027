@@ -1,6 +1,7 @@
 # PhyRC 2027 Challenge · Phase 1 Participant Guide
 
 **Challenge website: [emprise.cs.cornell.edu/phyrc/challenge-2027](https://emprise.cs.cornell.edu/phyrc/challenge-2027/)** (schedule, registration, and announcements)
+**Evaluation platform: [codabench.org/competitions/18366](https://www.codabench.org/competitions/18366/)**
 
 This is an Isaac Sim 6.0.1 environment where two **Stretch4 robots** work together to put a T-shirt on a manikin.
 You collect demonstrations by driving the robots with the keyboard (**teleop**).
