@@ -1,0 +1,2 @@
+# Dev-only packages (training, experiments, tests).
+pytest==8.4.2

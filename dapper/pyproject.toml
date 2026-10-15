@@ -1,0 +1,5 @@
+[tool.ruff]
+indent-width = 2
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "../src/PhyRC_Sim"]

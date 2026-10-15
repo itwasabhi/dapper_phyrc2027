@@ -16,3 +16,10 @@ __pycache__/
 *.pem
 *.key
 .DS_Store
+
+# dapper dev artifacts
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+*.egg-info/

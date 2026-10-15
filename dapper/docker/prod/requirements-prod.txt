@@ -1,0 +1,2 @@
+# Only packages the deployed policy imports at inference time.
+pillow==12.2.0
