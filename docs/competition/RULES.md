@@ -11,6 +11,7 @@ These rules apply to generating training data, training, and inference.
 - Static camera calibration, joint names and units, and public action scales needed to interpret the spec.
 - Models and controllers that **estimate** object or garment positions and features from allowed observations.
 - Training on demonstrations of public observations and actions recorded by humans through teleop.
+- Publicly available pretrained models and training data from outside this environment (for example, another simulator), as long as none of it comes from this environment's internal information listed under "Not allowed". List them in your training records.
 - Using scores and success labels to select demonstrations and analyze results. These labels must not be used as policy inputs or to create action targets.
 
 The robot base's world pose counts as allowed localization in this track; using it is not a violation.
