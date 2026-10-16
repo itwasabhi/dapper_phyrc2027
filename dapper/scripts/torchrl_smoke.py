@@ -53,11 +53,20 @@ def time_wrapped(env, seed: int, steps: int):
   """Returns (reset seconds, mean step seconds, rollout) for the torchrl env."""
   env.set_seed(seed)
   start = time.perf_counter()
-  env.reset()
+  tensordict = env.reset()
   reset_s = time.perf_counter() - start
-  start = time.perf_counter()
+  step_seconds = 0.0
+  for _ in range(steps):
+    tensordict = env.rand_action(tensordict)
+    start = time.perf_counter()
+    tensordict = env.step(tensordict)
+    step_seconds += time.perf_counter() - start
+    if tensordict["next", "done"].any():
+      break
+    tensordict = envs.step_mdp(tensordict)
+  # A second rollout only to inspect the collected keys; not timed.
   rollout = env.rollout(max_steps=steps, break_when_any_done=True)
-  return reset_s, (time.perf_counter() - start) / rollout.shape[0], rollout
+  return reset_s, step_seconds / steps, rollout
 
 
 def main() -> None:
