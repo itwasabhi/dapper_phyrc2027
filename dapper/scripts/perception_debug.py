@@ -1,29 +1,23 @@
 """Runs a detector over a recorded policy.hdf5 and writes annotated debug outputs.
 
-Run: dapper/run_py.sh /project/dapper/scripts/perception_debug.py \
-    /output/solution_alpha/run0/policy.hdf5 --output-dir /output/perception/alpha_omdet \
+To run: 
+dapper/run_py.sh /project/dapper/scripts/perception_debug.py \
+    /output/solution_alpha/run0/policy.hdf5 --output-dir /output/perception/omdet \
     --backend omdet --stride 4 [--prompt "box=white box|cardboard box" ...]
 """
 
 import argparse
 import pathlib
-import sys
 import time
 
 import numpy as np
 
-PROJECT_ROOT = pathlib.Path("/project")
-if not (PROJECT_ROOT / "src/PhyRC_Sim").is_dir():
-  PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "src/PhyRC_Sim"))
-sys.path.insert(0, str(PROJECT_ROOT / "dapper/src"))
+from Policy import dataset_reader
 
-from Policy import dataset_reader  # noqa: E402
-
-import utils_video  # noqa: E402
-from vision import debug_writer  # noqa: E402
-from vision import detector_factory  # noqa: E402
-from vision import detections as detections_lib  # noqa: E402
+import utils_video
+from vision import debug_writer
+from vision import detector_factory
+from vision import detections as detections_lib
 
 
 def _parse_prompts(specs: list[str] | None):

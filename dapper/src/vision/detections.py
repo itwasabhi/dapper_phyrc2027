@@ -13,10 +13,10 @@ CAMERA_NAMES = (
 )
 
 DEFAULT_PROMPTS: Mapping[str, Sequence[str]] = {
-  "box": ("white box", "cardboard box"),
-  "shirt": ("t-shirt",),
+  "box": ("white box"),
+  "shirt": ("t-shirt with yellow collar",),
   "manikin": ("mannequin", "person"),
-  "chair": ("stool", "chair"),
+  # "chair": ("stool", "chair"),
   "robot": ("robot",),
 }
 

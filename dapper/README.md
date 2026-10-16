@@ -5,9 +5,14 @@ Home of our dev efforts for the PhyRC challenge.
 Here we define our own docker image with additional python requirements to aid for development (docker/dev) and deployment to the official evaluation (docker/prod). 
 
 All commands below run from the project root.
+
+Setup (needed any time requirements change). 
 ```
 ./run.sh build && dapper/docker/build.sh all
+```
 
+Running common scripts: 
+```
 dapper/run_py.sh -m pytest -p no:cacheprovider /project/dapper/src/tests -c /project/dapper/pyproject.toml
 dapper/run_sim.sh python /project/dapper/scripts/random_rollout.py --output-dir /output/random_rollout/run0 --overwrite --write-video
 dapper/run_sim.sh python /project/dapper/scripts/run_solution.py --solution-dir /project/dapper/src/solution-alpha --output-dir /output/solution_alpha/run0 --overwrite --write-video

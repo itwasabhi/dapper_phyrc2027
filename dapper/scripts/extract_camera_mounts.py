@@ -10,19 +10,11 @@ Then: cp output/camera_mounts.json dapper/src/vision/camera_mounts.json
 import argparse
 import json
 import pathlib
-import sys
 
 import numpy as np
 
-PROJECT_ROOT = pathlib.Path("/project")
-if not (PROJECT_ROOT / "src/PhyRC_Sim").is_dir():
-  PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "src/PhyRC_Sim"))
-sys.path.insert(0, str(PROJECT_ROOT / "dapper/src"))
-sys.path.insert(0, "/scripts")  # Upstream scripts dir in the container.
-
-from vision import camera_geometry  # noqa: E402
-from vision import detections as detections_lib  # noqa: E402
+from vision import camera_geometry
+from vision import detections as detections_lib
 
 LIFT_COLUMN, WRIST_YAW_COLUMN, WRIST_PITCH_COLUMN = 3, 5, 6
 MOVE_STEPS = 20

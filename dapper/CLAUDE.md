@@ -3,6 +3,7 @@ Research-and-development for a robotic caregiving task.
 
 ## Rules
 Python scripts and tests run in the dapper Docker images (see Python dependencies below), not in a host virtualenv.
+The launchers set `PYTHONPATH` (`dapper/src`, `src/PhyRC_Sim`, `/scripts`), so scripts import modules directly; do not add `sys.path` manipulation.
 
 ## Tips
 When running a test file (`dapper/run_py.sh -m pytest -p no:cacheprovider /project/dapper/src/tests -c /project/dapper/pyproject.toml -k ...`), be sure to use test filters to only run the test that is relevant for that particular interaction. 

@@ -6,19 +6,13 @@ Run: dapper/run_py.sh /project/dapper/scripts/download_models.py [name ...]
 import argparse
 import os
 import pathlib
-import sys
 
 # The images default to offline mode; this script is the one place that goes online.
 os.environ["HF_HUB_OFFLINE"] = "0"
 
-PROJECT_ROOT = pathlib.Path("/project")
-if not (PROJECT_ROOT / "dapper/src").is_dir():
-  PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "dapper/src"))
+import huggingface_hub
 
-import huggingface_hub  # noqa: E402
-
-from vision import model_registry  # noqa: E402
+from vision import model_registry
 
 
 def main() -> None:

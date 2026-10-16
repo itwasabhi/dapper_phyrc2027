@@ -10,17 +10,12 @@ import os
 import pathlib
 import sys
 
-PROJECT_ROOT = pathlib.Path("/project")
-if not (PROJECT_ROOT / "src/PhyRC_Sim").is_dir():
-  PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "src/PhyRC_Sim"))
-sys.path.insert(0, str(PROJECT_ROOT / "dapper/src"))
-sys.path.insert(0, "/scripts")  # Upstream scripts dir in the container.
+import utils_random_rollout
+import utils_rollout_recorder
+import utils_solution
+import utils_video
 
-import utils_random_rollout  # noqa: E402
-import utils_rollout_recorder  # noqa: E402
-import utils_solution  # noqa: E402
-import utils_video  # noqa: E402
+PROJECT_ROOT = pathlib.Path("/project")
 
 
 def parse_args() -> argparse.Namespace:

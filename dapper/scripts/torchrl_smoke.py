@@ -1,72 +1,59 @@
-"""Checks DressingEnv through torchrl's GymWrapper and times it against the raw env.
+"""Benchmarks DressingEnv frame-collection throughput with a torchrl Collector.
 
-Run: dapper/run_sim.sh python /project/dapper/scripts/torchrl_smoke.py --steps 20
+Runs a random policy (torchrl's default when `policy=None`) through a Collector
+for several iterations and reports frames_per_second.
+
+Run (single env, no subprocess):
+  dapper/run_sim.sh python /project/dapper/scripts/torchrl_smoke.py
+
+Run (4 parallel envs, one container, 4 worker subprocesses):
+  dapper/run_sim.sh python /project/dapper/scripts/torchrl_smoke.py --num-workers 4
 """
 
 import argparse
-import pathlib
-import sys
+import functools
 import time
 
-PROJECT_ROOT = pathlib.Path("/project")
-if not (PROJECT_ROOT / "src/PhyRC_Sim").is_dir():
-  PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "src/PhyRC_Sim"))
-sys.path.insert(0, str(PROJECT_ROOT / "dapper/src"))
-sys.path.insert(0, "/scripts")  # Upstream scripts dir in the container.
+from torchrl import collectors, envs
 
-import numpy as np  # noqa: E402
-from torchrl import envs  # noqa: E402
-
-import utils_random_rollout  # noqa: E402
-import utils_torchrl_env  # noqa: E402
+import utils_torchrl_env
 
 
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--seed", type=int, default=0)
-  parser.add_argument("--steps", type=int, default=20, help="20 Hz steps.")
-  parser.add_argument("--resolution", type=int, nargs=2, metavar=("W", "H"))
+  parser.add_argument(
+    "--num-workers", type=int, default=1, help="Parallel DressingEnv subprocesses."
+  )
+  parser.add_argument("--frames-per-batch", type=int, default=24)
+  parser.add_argument("--iterations", type=int, default=50)
+  parser.add_argument("--max-episode-steps", type=int, default=400)
   args = parser.parse_args()
-  if args.steps < 1:
-    parser.error("--steps must be >= 1")
+  if args.num_workers < 1:
+    parser.error("--num-workers must be >= 1")
+  if args.frames_per_batch < 1:
+    parser.error("--frames-per-batch must be >= 1")
+  if args.iterations < 1:
+    parser.error("--iterations must be >= 1")
+  if args.max_episode_steps < 1:
+    parser.error("--max-episode-steps must be >= 1")
   return args
 
 
-def time_raw(env, seed: int, steps: int) -> tuple[float, float]:
-  """Returns (reset seconds, mean step seconds) for the unwrapped env."""
-  rng = np.random.default_rng(seed)
-  start = time.perf_counter()
-  env.reset(seed=seed)
-  reset_s = time.perf_counter() - start
-  action = None
-  start = time.perf_counter()
-  for step in range(steps):
-    action = utils_random_rollout.sample_action(rng, action, step, 10, 1.0, 0.05)
-    _, _, terminated, truncated, _ = env.step(action)
-    if terminated or truncated:
-      break
-  return reset_s, (time.perf_counter() - start) / (step + 1)
+def build_env(seed: int, max_episode_steps: int) -> envs.TransformedEnv:
+  """Constructs one DressingEnv and wraps it; safe to call in a spawned subprocess."""
+  import policy_cli  # pylint: disable=import-outside-toplevel
 
+  policy_cli.install_failure_handler()
+  from Policy import environment  # pylint: disable=import-outside-toplevel
 
-def time_wrapped(env, seed: int, steps: int):
-  """Returns (reset seconds, mean step seconds, rollout) for the torchrl env."""
+  gym_env = environment.DressingEnv(
+    profile="actor_rgbd",
+    max_episode_steps=max_episode_steps,
+  )
+  env = utils_torchrl_env.make_env(gym_env)
   env.set_seed(seed)
-  start = time.perf_counter()
-  tensordict = env.reset()
-  reset_s = time.perf_counter() - start
-  step_seconds = 0.0
-  for _ in range(steps):
-    tensordict = env.rand_action(tensordict)
-    start = time.perf_counter()
-    tensordict = env.step(tensordict)
-    step_seconds += time.perf_counter() - start
-    if tensordict["next", "done"].any():
-      break
-    tensordict = envs.step_mdp(tensordict)
-  # A second rollout only to inspect the collected keys; not timed.
-  rollout = env.rollout(max_steps=steps, break_when_any_done=True)
-  return reset_s, step_seconds / steps, rollout
+  return env
 
 
 def main() -> None:
@@ -75,27 +62,69 @@ def main() -> None:
   import policy_cli  # pylint: disable=import-outside-toplevel
 
   policy_cli.install_failure_handler()
-  from Policy import environment  # pylint: disable=import-outside-toplevel
 
-  gym_env = environment.DressingEnv(
-    profile="actor_rgbd",
-    resolution=tuple(args.resolution) if args.resolution else None,
-    max_episode_steps=args.steps,
+  if args.num_workers == 1:
+    env = build_env(args.seed, args.max_episode_steps)
+    envs.check_env_specs(env)
+    create_env_fn = env
+  else:
+    worker_fns = [
+      functools.partial(
+        build_env, seed=args.seed + i, max_episode_steps=args.max_episode_steps
+      )
+      for i in range(args.num_workers)
+    ]
+    create_env_fn = envs.ParallelEnv(
+      args.num_workers, worker_fns, mp_start_method="spawn"
+    )
+
+  # total_frames=-1 (collect indefinitely): on the batch that satisfies a finite
+  # total_frames, Collector closes the env before yielding it, and close() can
+  # fast-exit the process (see DressingEnv.close()) -- losing that last batch and
+  # every print below it. We stop ourselves after args.iterations instead, so
+  # `collector.shutdown()` only ever runs under our own control, after printing.
+  collector = collectors.Collector(
+    create_env_fn,
+    policy=None,
+    frames_per_batch=args.frames_per_batch,
+    total_frames=-1,
   )
-  raw_reset_s, raw_step_s = time_raw(gym_env, args.seed, args.steps)
 
-  env = utils_torchrl_env.make_env(gym_env)
-  envs.check_env_specs(env)
-  wrapped_reset_s, wrapped_step_s, rollout = time_wrapped(env, args.seed, args.steps)
+  iteration_seconds = []
+  previous = time.perf_counter()
+  for batch_index, _ in enumerate(collector):
+    now = time.perf_counter()
+    iteration_seconds.append(now - previous)
+    previous = now
+    if batch_index + 1 >= args.iterations:
+      break
 
-  print(f"rollout: {rollout.shape[0]} steps")
-  for key, value in rollout.items(include_nested=True, leaves_only=True):
-    print(f"  {key}: {tuple(value.shape)} {value.dtype}")
-  print(f"final done={bool(rollout['next', 'done'][-1])}")
-  print(f"raw     reset {raw_reset_s:.2f}s  step {raw_step_s * 1e3:.1f}ms")
-  print(f"wrapped reset {wrapped_reset_s:.2f}s  step {wrapped_step_s * 1e3:.1f}ms")
-  # close() can fast-exit the process; everything is printed above.
-  gym_env.close()
+  warmup_seconds = iteration_seconds[0]
+  steady_seconds = sum(iteration_seconds[1:])
+  steady_frames = args.frames_per_batch * (len(iteration_seconds) - 1)
+  warmup_frames_per_second = args.frames_per_batch / warmup_seconds
+
+  print(
+    f"num_workers={args.num_workers} frames_per_batch={args.frames_per_batch} "
+    f"iterations={len(iteration_seconds)}"
+  )
+  print(
+    f"warmup : {args.frames_per_batch} frames in {warmup_seconds:.2f}s "
+    f"(frames_per_second={warmup_frames_per_second:.1f}, includes reset/startup)"
+  )
+  if steady_seconds > 0:
+    frames_per_second = steady_frames / steady_seconds
+    frames_per_second_per_env = frames_per_second / args.num_workers
+    print(
+      f"steady : {steady_frames} frames in {steady_seconds:.2f}s "
+      f"(frames_per_second={frames_per_second:.1f}, "
+      f"frames_per_second_per_env={frames_per_second_per_env:.1f})"
+    )
+  else:
+    print("steady : not available (need --iterations >= 2)")
+
+  # shutdown() can fast-exit the process; everything is printed above.
+  collector.shutdown()
 
 
 if __name__ == "__main__":

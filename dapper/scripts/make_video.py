@@ -6,11 +6,8 @@ Run: dapper/run_py.sh /project/dapper/scripts/make_video.py \
 
 import argparse
 import pathlib
-import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-
-import utils_video  # noqa: E402
+import utils_video
 
 
 def main() -> None:

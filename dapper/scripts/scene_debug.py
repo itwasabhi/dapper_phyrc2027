@@ -1,31 +1,24 @@
 """Replays a recorded policy.hdf5 through BasicSceneIntegrator and dumps the grid layers.
 
-Run: dapper/run_py.sh /project/dapper/scripts/scene_debug.py /output/solution_gamma/run0/policy.hdf5
+Run: dapper/run_py.sh /project/dapper/scripts/scene_debug.py /output/solution_alpha/run0/policy.hdf5
 Writes to <run dir>/scene_debug unless --output-dir is given.
 """
 
 import argparse
 import json
 import pathlib
-import sys
 
 import cv2
 import numpy as np
 
-PROJECT_ROOT = pathlib.Path("/project")
-if not (PROJECT_ROOT / "src/PhyRC_Sim").is_dir():
-  PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "src/PhyRC_Sim"))
-sys.path.insert(0, str(PROJECT_ROOT / "dapper/src"))
+from Policy import dataset_reader
 
-from Policy import dataset_reader  # noqa: E402
-
-import utils_video  # noqa: E402
-from vision import camera_geometry  # noqa: E402
-from vision import detections as detections_lib  # noqa: E402
-from vision import detector_factory  # noqa: E402
-from vision import scene as scene_lib  # noqa: E402
-from vision import scene_integrator  # noqa: E402
+import utils_video
+from vision import camera_geometry
+from vision import detections as detections_lib
+from vision import detector_factory
+from vision import scene as scene_lib
+from vision import scene_integrator
 
 LAYER_SCALE = 2
 HEIGHT_MAX_M = 1.8
