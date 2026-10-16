@@ -1,2 +1,8 @@
 # Dev-only packages (training, experiments, tests).
 pytest==8.4.2
+torchrl==0.14.1
+tensordict==0.14.3
+# Transitive pins of torchrl/tensordict.
+pyvers==0.2.3
+hoptorch==0.1.4
+orjson==3.13.0
