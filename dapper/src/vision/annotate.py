@@ -42,15 +42,30 @@ def annotate_frame(
   return frame
 
 
+def _panel(rgb: np.ndarray, size: int) -> np.ndarray:
+  """Scales an RGB image to fit a size x size BGR tile, padding with black."""
+  scale = size / max(rgb.shape[:2])
+  resized = cv2.resize(rgb, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+  tile = np.zeros((size, size, 3), np.uint8)
+  tile[: resized.shape[0], : resized.shape[1]] = resized[..., ::-1]
+  return tile
+
+
 def annotate_batch(
   rgb_batch: np.ndarray,
   detections_per_camera: Sequence[Sequence[detections_lib.Detection]],
+  top_down: np.ndarray | None = None,
 ) -> np.ndarray:
-  """Tiles annotated cameras, each titled with its name, into one BGR image."""
+  """Tiles annotated cameras, each titled with its name, into one BGR image.
+
+  An optional RGB top-down map fills the tile after the cameras.
+  """
   frames = [
     utils_video.label(annotate_frame(rgb, detections), name)
     for rgb, detections, name in zip(
       rgb_batch, detections_per_camera, detections_lib.CAMERA_NAMES
     )
   ]
+  if top_down is not None:
+    frames.append(utils_video.label(_panel(top_down, rgb_batch.shape[1]), "scene"))
   return utils_video.tile(frames)

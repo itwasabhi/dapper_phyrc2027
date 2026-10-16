@@ -18,3 +18,10 @@ def test_annotate_frame_draws_box_in_class_color():
   frame = annotate.annotate_frame(_batch()[0], [detection])
   assert tuple(frame[70, 10]) == annotate.CLASS_COLORS["shirt"]
   assert frame[70, 50].sum() == 0
+
+
+def test_annotate_batch_places_top_down_panel_after_cameras():
+  top_down = np.full((120, 160, 3), 255, np.uint8)
+  tiled = annotate.annotate_batch(_batch(), [[]] * 5, top_down)
+  assert tiled.shape == (512, 768, 3)
+  assert tiled[256 + 100, 512 + 100].min() == 255

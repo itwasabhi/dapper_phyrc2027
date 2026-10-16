@@ -30,8 +30,9 @@ class DebugWriter:
     step: int,
     rgb_batch: np.ndarray,
     detections_per_camera: Sequence[Sequence[detections_lib.Detection]],
+    top_down: np.ndarray | None = None,
   ) -> None:
-    frame = annotate.annotate_batch(rgb_batch, detections_per_camera)
+    frame = annotate.annotate_batch(rgb_batch, detections_per_camera, top_down)
     if self._log is None:
       self._dir.mkdir(parents=True, exist_ok=True)
       self._log = open(self._dir / "detections.jsonl", "w")
