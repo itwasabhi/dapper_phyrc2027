@@ -43,6 +43,25 @@ Rules:
 
 ## Code features
 
+### Behaviors and solutions
+A solution's `policy.py` composes a sequence of **behaviors** from `dapper/src/behaviors/`: each
+owns both robots' actions for a span of steps. `behaviors/execution_utils.py` steps the active one
+and advances once it's done (see `dapper/src/solution-alpha/policy.py` for the reference wiring).
+Implement new or modified behaviors here (e.g. "pick up the shirt", "a second dressing policy"),
+not inline in a solution's `policy.py`.
+
+- `behaviors/<name>.py` for a plain behavior; `behaviors/<name>/` once it needs its own training
+  scripts/configs (e.g. a future `behaviors/dress_1/`).
+- No declared interface — by convention a behavior implements `reset(state)`,
+  `step(observation) -> np.ndarray` (2,9), `done() -> bool`, `close()`, called duck-typed by
+  `execution_utils`.
+- Share state only via `behaviors.base.BehaviorState` (passed into `reset`); put shared global
+  settings (e.g. control rate) in `behaviors.base.BehaviorCfg`, injected into each constructor.
+- Dependency injection only, as in `vision/scene_integrator.BasicSceneIntegrator` — never subclass
+  a behavior. Per-behavior tunables go in a frozen dataclass; reuse `behaviors/motion.py` for
+  pose/control math.
+- Tests in `behaviors/tests/<name>_test.py`, kept minimal, with fakes instead of real models.
+
 ### Vision and open models
 `dapper/src/vision/` holds detection/annotation code. Open models are downloaded from Hugging Face only via `dapper/scripts/download_models.py` into `~/data/physrc_assets` (mounted at `/assets`); everything else runs offline. See `dapper/src/vision/MODELS.md`.
 Run any solution with `--debug` (`run_solution.py`) to get annotated frames, `annotated.mp4` and `detections.jsonl` in `<output-dir>/debug/`. `dapper/scripts/perception_debug.py` does the same over a recorded `policy.hdf5`.

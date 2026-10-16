@@ -1,87 +1,61 @@
-"""solution-alpha: raises the wrist cameras, spins once and integrates a scene estimate.
+"""solution-alpha: scans the room, then drives both robots to the shirt.
 
-Set DAPPER_DEBUG_DIR (run_solution.py --debug does) to write annotated frames and
-scene_estimate.json there.
+Set DAPPER_DEBUG_DIR (run_solution.py --debug does) so scan_room writes annotated frames and
+scene_estimate.json under <debug-dir>/scan_room/.
 """
 
-import json
-import math
 import os
 import pathlib
 
-import numpy as np
-
+from behaviors import base
+from behaviors import drive_to_shirt
+from behaviors import execution_utils
+from behaviors import scan_room
 from vision import camera_geometry
-from vision import debug_writer
 from vision import detector_factory
-from vision import scene as scene_lib
 from vision import scene_integrator
 
-BASE_YAW_COLUMN = 2
-LIFT_COLUMN = 3
-WRIST_PITCH_COLUMN = 6
-BASE_ANGULAR_RATE = 2.86
-YAW_COMMAND = 0.2
-LIFT_COMMAND = 1.0
-# Sign needed to tilt the wrist camera toward the table tops.
-WRIST_PITCH_COMMAND = -1.0
-POLICY_HZ = 20
-UPDATE_EVERY_N_STEPS = 4
-RAISE_STEPS = 40
-SPIN_MARGIN = 1.1
-SPIN_STEPS = math.ceil(
-  SPIN_MARGIN * 2 * math.pi / (YAW_COMMAND * BASE_ANGULAR_RATE) * POLICY_HZ
-)
 DEBUG_DIR_ENV = "DAPPER_DEBUG_DIR"
 
 
 def load_policy(checkpoint, observation_space, action_space):
   del checkpoint, observation_space
 
+  cfg = base.BehaviorCfg()
   integrator = scene_integrator.BasicSceneIntegrator(
     detector=detector_factory.make_omdet_turbo(),
     mounts=camera_geometry.load_mounts(),
-    config=scene_integrator.GridConfig(update_every_n_calls=UPDATE_EVERY_N_STEPS),
+    config=scene_integrator.GridConfig(
+      update_every_n_calls=scan_room.UPDATE_EVERY_N_STEPS
+    ),
   )
   debug_dir = os.environ.get(DEBUG_DIR_ENV)
+  scan = scan_room.ScanRoom(
+    integrator,
+    cfg=cfg,
+    debug_dir=pathlib.Path(debug_dir) / "scan_room" if debug_dir else None,
+  )
+  drive = drive_to_shirt.DriveToShirt(cfg=cfg)
 
-  class ScenePolicy:
-    def __init__(self):
-      self.scene = scene_lib.SceneEstimate()
-      self._step = 0
-      self._writer = None
-      if debug_dir:
-        self._writer = debug_writer.DebugWriter(
-          pathlib.Path(debug_dir), POLICY_HZ / UPDATE_EVERY_N_STEPS
-        )
+  class SequencedPolicy:
+    def __init__(self, behaviors):
+      self._behaviors = behaviors
+      self._index = 0
+      self._state = None
 
     def reset(self):
-      self._step = 0
-      self.scene = scene_lib.SceneEstimate()
-      integrator.reset()
+      self._index = 0
+      self._state = execution_utils.create_initial_state()
+      self._behaviors[0].reset(self._state)
 
     def __call__(self, observation):
-      self.scene = integrator.update(observation)
-      if self._writer and self._step % UPDATE_EVERY_N_STEPS == 0:
-        self._writer.write(
-          self._step,
-          observation["rgb"],
-          self.scene.debug_detections,
-          self.scene.debug_image,
-        )
-      action = np.zeros(action_space.shape, dtype=np.float32)
-      if self._step < RAISE_STEPS:
-        action[:, LIFT_COLUMN] = LIFT_COMMAND
-        action[:, WRIST_PITCH_COLUMN] = WRIST_PITCH_COMMAND
-      elif self._step < RAISE_STEPS + SPIN_STEPS:
-        action[:, BASE_YAW_COLUMN] = YAW_COMMAND
-      self._step += 1
+      action, self._index = execution_utils.execute_sequence(
+        self._behaviors, self._index, observation, self._state
+      )
       return action
 
     def close(self):
-      if self._writer:
-        self._writer.close()
-        out = pathlib.Path(debug_dir) / "scene_estimate.json"
-        out.write_text(json.dumps(scene_lib.to_jsonable(self.scene), indent=2))
+      for behavior in self._behaviors:
+        behavior.close()
 
-  return ScenePolicy()
+  return SequencedPolicy([scan, drive])
