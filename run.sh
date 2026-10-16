@@ -82,6 +82,9 @@ ARGS=(run --rm --network=host --user "1234:$(id -g)" --label phyrc.project=PhyRC
 for mapping in kit:kit/cache ov:.cache/ov pip:.cache/pip warp:.cache/warp glcache:.cache/nvidia/GLCache computecache:.nv/ComputeCache logs:.nvidia-omniverse/logs data:.local/share/ov/data documents:Documents mpl:.cache/matplotlib; do
     ARGS+=(-v "$ROOT/cache/${mapping%%:*}:/isaac-sim/${mapping#*:}:rw")
 done
+# dapper patch: extra docker args (see dapper/PATCHES.md).
+read -ra EXTRA_DOCKER_ARGS <<< "${PHYRC_EXTRA_DOCKER_ARGS:-}"
+ARGS+=("${EXTRA_DOCKER_ARGS[@]}")
 cpu() {
     docker "${ARGS[@]}" --entrypoint /bin/bash "$IMAGE" -c '
         umask 0002

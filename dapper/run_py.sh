@@ -5,5 +5,5 @@ source "$(dirname "${BASH_SOURCE[0]}")/output_link.sh"
 exec docker run --rm --gpus all --network=host --user "1234:$(id -g)" \
   -e PYTHONPATH=/isaac-sim/extsDeprecated/omni.isaac.ml_archive/pip_prebundle:/opt/isaac-compat \
   -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 \
-  -v "$root:/project:ro" -v "$root/output:/output:rw" -w /project \
+  -v "$root:/project:ro" -v "$root/output:/output:rw" -v "$assets_dir:/assets:rw" -w /project \
   --entrypoint /isaac-sim/python.sh "${DAPPER_IMAGE:-dapper-dev}" "$@"

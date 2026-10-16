@@ -17,9 +17,7 @@ _LOAD_CONTRACT = policy_contract.load_contract
 
 
 def _contract():
-  contract = _LOAD_CONTRACT(
-    PROJECT_ROOT / utils_rollout_recorder.CONTRACT_PATH
-  )
+  contract = _LOAD_CONTRACT(PROJECT_ROOT / utils_rollout_recorder.CONTRACT_PATH)
   contract["default_dimensions"].update(width=SIZE, height=SIZE)
   return contract
 
@@ -74,9 +72,7 @@ def test_ticks_advance_by_twelve_and_observations_are_copied():
   obs["joint_position"][:] = 5
   action = np.full((2, 9), 0.5, np.float32)
   for step in range(3):
-    recorder.record_step(
-      action, _observation(0.05 * (step + 1), action)
-    )
+    recorder.record_step(action, _observation(0.05 * (step + 1), action))
   appends = [call for call in writer.calls if call[0] == "append"]
   assert [c[4]["start_tick"] for c in appends] == [0, 12, 24]
   assert [c[4]["end_tick"] for c in appends] == [12, 24, 36]

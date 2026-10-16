@@ -3,6 +3,9 @@
 root=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 output_dir=${DAPPER_OUTPUT_DIR:-$HOME/data/dapper_phyrc}
 mkdir -p "$output_dir"
+# Downloaded open models; mounted at /assets (see dapper/src/vision/MODELS.md).
+assets_dir=${DAPPER_ASSETS_DIR:-$HOME/data/physrc_assets}
+mkdir -p "$assets_dir"
 if [[ ! -e "$root/output" && ! -L "$root/output" ]]; then
   ln -s "$output_dir" "$root/output"
 elif [[ -L "$root/output" && "$(readlink -f "$root/output")" != "$(readlink -f "$output_dir")" ]]; then

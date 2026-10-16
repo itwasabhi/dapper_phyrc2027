@@ -39,9 +39,7 @@ def open_writer(
 ) -> training_dataset.DatasetWriter:
   """Creates `output_dir`, which must not exist yet."""
   contract = policy_contract.load_contract(project_root / CONTRACT_PATH)
-  return training_dataset.DatasetWriter(
-    output_dir, contract, _jsonable(metadata)
-  )
+  return training_dataset.DatasetWriter(output_dir, contract, _jsonable(metadata))
 
 
 class RolloutRecorder:

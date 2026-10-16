@@ -42,6 +42,11 @@ Rules:
 
 ## Code features
 
+### Vision and open models
+`dapper/src/vision/` holds detection/annotation code. Open models are downloaded from Hugging Face only via `dapper/scripts/download_models.py` into `~/data/physrc_assets` (mounted at `/assets`); everything else runs offline. See `dapper/src/vision/MODELS.md`.
+Run any solution with `--debug` (`run_solution.py`) to get annotated frames, `annotated.mp4` and `detections.jsonl` in `<output-dir>/debug/`. `dapper/scripts/perception_debug.py` does the same over a recorded `policy.hdf5`.
+Never put code in `~/data` / `output/`; throwaway scripts go under `dapper/`.
+
 ### Recording rollouts
 Any script driving `DressingEnv(profile="actor_rgbd")` can record the same `policy.hdf5` as teleop (loadable with `Policy.dataset_reader.PolicyDataset`) via `utils_rollout_recorder` (see `scripts/random_rollout.py`). Pass `--write-video` (via `add_recording_flags`) to also render `<output-dir>/videos/*.mp4`, or render later:
 ```

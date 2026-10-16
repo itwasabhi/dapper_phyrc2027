@@ -6,6 +6,7 @@ Run: ./run.sh python /project/dapper/scripts/run_solution.py \
 """
 
 import argparse
+import os
 import pathlib
 import sys
 
@@ -37,6 +38,11 @@ def parse_args() -> argparse.Namespace:
     required=True,
     help="Where to write the trajectory; must be under /output in docker.",
   )
+  parser.add_argument(
+    "--debug",
+    action="store_true",
+    help="Tell the policy to write debug files (e.g. annotated frames) to <output-dir>/debug.",
+  )
   parser.add_argument("--overwrite", action="store_true")
   parser.add_argument("--seed", type=int, default=0)
   parser.add_argument("--steps", type=int, default=100, help="20 Hz steps.")
@@ -54,6 +60,8 @@ def main() -> None:
   args = parse_args()
   utils_random_rollout.prepare_output_dir(args.output_dir, args.overwrite)
   checkpoint = args.checkpoint or utils_solution.find_checkpoint(args.solution_dir)
+  if args.debug:
+    os.environ["DAPPER_DEBUG_DIR"] = str(args.output_dir / "debug")
 
   import policy_cli  # pylint: disable=import-outside-toplevel
 
@@ -95,6 +103,8 @@ def main() -> None:
       break
 
   # Save before close(): it can fast-exit the process.
+  if hasattr(policy, "close"):
+    policy.close()
   recorder.close()
   print(f"Wrote {recorder.num_steps} steps to {args.output_dir}")
   if args.write_video:

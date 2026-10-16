@@ -13,9 +13,7 @@ CODEC = "mp4v"  # The only MPEG-4 codec OpenCV can encode in the sim image.
 POLICY_HZ = 20
 
 
-def depth_to_bgr(
-  depth: np.ndarray, valid: np.ndarray, far_m: float
-) -> np.ndarray:
+def depth_to_bgr(depth: np.ndarray, valid: np.ndarray, far_m: float) -> np.ndarray:
   """Colormaps metric depth; invalid pixels are black."""
   scaled = np.clip(depth[..., 0] / far_m, 0.0, 1.0)
   colored = cv2.applyColorMap((scaled * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
@@ -35,11 +33,9 @@ def tile(frames: Sequence[np.ndarray], num_columns: int = NUM_COLUMNS) -> np.nda
   return np.concatenate(rows, axis=0)
 
 
-def _label(frame: np.ndarray, text: str) -> np.ndarray:
+def label(frame: np.ndarray, text: str) -> np.ndarray:
   frame = np.ascontiguousarray(frame)
-  cv2.putText(
-    frame, text, (4, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1
-  )
+  cv2.putText(frame, text, (4, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
   return frame
 
 
@@ -60,7 +56,7 @@ def _frame(
       )
     else:
       frame = cv2.cvtColor(group[f"{name}_rgb"][step], cv2.COLOR_RGB2BGR)
-    frames.append(_label(frame, name))
+    frames.append(label(frame, name))
   return tile(frames)
 
 
