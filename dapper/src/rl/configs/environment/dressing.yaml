@@ -1,0 +1,8 @@
+# Image: dapper-dev (default). Upstream DressingEnv; run with dapper/run_sim.sh.
+num_envs: 1
+install_failure_handler: true
+shutdown_simulation_app: false
+env:
+  _target_: Policy.environment.DressingEnv
+  profile: actor_rgbd
+  max_episode_steps: 400

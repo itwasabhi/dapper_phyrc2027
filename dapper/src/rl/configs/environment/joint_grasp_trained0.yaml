@@ -1,0 +1,25 @@
+# Image: dapper-dev (default). Upstream-sim ShirtGraspEnv; run with dapper/run_sim.sh.
+num_envs: 1
+install_failure_handler: true
+# Closing Isaac can fast-exit the process, so ppo.py closes it after saving.
+shutdown_simulation_app: true
+env:
+  _target_: rl.envs.shirt_grasp_env.ShirtGraspEnv
+  resolution: [128, 128]
+  max_episode_steps: 200
+  settle_ticks: 90
+  table_index: null
+  shirt_xy_jitter_m: 0.05
+  defer_app_close: true
+  max_reset_attempts: 5
+  spawn_config:
+    _target_: rl.envs.spawn.SpawnConfig
+    num_robots: 2
+    pairing: random_pair
+    standoff_m: 0.8
+    position_noise_m: 0.1
+    yaw_noise_deg: 15.0
+    yaw_offset_deg: 0.0
+  reward_fn:
+    _target_: rl.envs.rewards.zero_reward
+    _partial_: true

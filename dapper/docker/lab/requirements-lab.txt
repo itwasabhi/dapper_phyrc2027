@@ -1,0 +1,7 @@
+# Isaac Lab runtime imports not provided by the Isaac Sim image (Isaac Lab itself is installed
+# with --no-deps in the Dockerfile so that torch and other base packages never change).
+lazy-loader==0.6
+# Same version as Isaac Sim's omni.warp.core extension; Isaac Lab imports it before Kit starts.
+warp-lang==1.13.0
+prettytable==3.18.0
+wcwidth==0.9.2

@@ -75,7 +75,9 @@ def main() -> None:
       },
     )
   )
-  recorder.start_episode(observation, info)
+  recorder.start_episode(
+    observation, utils_rollout_recorder.dressing_episode_metadata(info)
+  )
   action = None
   for step in range(args.steps):
     action = utils_random_rollout.sample_action(

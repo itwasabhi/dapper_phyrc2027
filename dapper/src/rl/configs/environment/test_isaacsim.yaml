@@ -1,0 +1,14 @@
+# Image: dapper-lab. Run with:
+#   DAPPER_IMAGE=dapper-lab dapper/run_sim.sh python /project/dapper/src/rl/scripts/torchrl_smoke.py environment=test_isaacsim
+# Needs the scene from rl/scripts/export_grasp_scene.py (run once in dapper-dev).
+# Scene-only batched Isaac Lab env: actions are ignored, reward is zero. Not recordable
+# (observations are not contract-complete), so keep record.enabled=false.
+backend: isaaclab
+num_envs: 16
+env:
+  _target_: rl.envs.isaaclab.env.make_scene_env
+  scene_dir: /output/rl/scenes/grasp
+  resolution: [128, 128]
+  max_episode_steps: 200
+  include_shirt: true  # false drops the cloth: a throughput sanity check
+shutdown_simulation_app: true

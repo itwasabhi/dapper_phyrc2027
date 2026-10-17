@@ -47,6 +47,10 @@ def _info():
   }
 
 
+def _metadata():
+  return utils_rollout_recorder.dressing_episode_metadata(_info())
+
+
 class FakeWriter:
   def __init__(self):
     self.calls = []
@@ -68,7 +72,7 @@ def test_ticks_advance_by_twelve_and_observations_are_copied():
   writer = FakeWriter()
   recorder = utils_rollout_recorder.RolloutRecorder(writer)
   obs = _observation(0.0, np.zeros((2, 9), np.float32))
-  recorder.start_episode(obs, _info())
+  recorder.start_episode(obs, _metadata())
   obs["joint_position"][:] = 5
   action = np.full((2, 9), 0.5, np.float32)
   for step in range(3):
@@ -85,7 +89,7 @@ def test_requires_rgbd_observation():
   obs = _observation(0.0, np.zeros((2, 9), np.float32))
   del obs["rgb"]
   with pytest.raises(ValueError):
-    recorder.start_episode(obs, _info())
+    recorder.start_episode(obs, _metadata())
 
 
 def test_record_step_needs_episode():
@@ -104,7 +108,7 @@ def test_round_trip_through_real_writer(tmp_path, monkeypatch):
   recorder = utils_rollout_recorder.RolloutRecorder(
     utils_rollout_recorder.open_writer(PROJECT_ROOT, out, {"seed": 1})
   )
-  recorder.start_episode(_observation(0.0, np.zeros((2, 9), np.float32)), _info())
+  recorder.start_episode(_observation(0.0, np.zeros((2, 9), np.float32)), _metadata())
   action = np.full((2, 9), 0.25, np.float32)
   for step in range(2):
     recorder.record_step(action, _observation(0.05 * (step + 1), action))

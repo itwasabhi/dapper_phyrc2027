@@ -3,7 +3,7 @@
 import argparse
 import json
 import pathlib
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional, Tuple
 
 import numpy as np
 
@@ -32,13 +32,32 @@ def _jsonable(value: Any) -> Any:
   return json.loads(json.dumps(value, default=str))
 
 
+def dressing_episode_metadata(info: Mapping[str, Any]) -> dict[str, Any]:
+  """Episode metadata from a DressingEnv reset `info`."""
+  robots = info["state"]["robots"]
+  return {
+    "start_tick": 0,
+    "episode_seed": info["episode_seed"],
+    "human_spawn": info["human_spawn"],
+    "garment_spawn": info["garment_spawn"],
+    "joint_names": [[j["name"] for j in r["joints"]] for r in robots],
+    "joint_units": [[j["unit"] for j in r["joints"]] for r in robots],
+  }
+
+
 def open_writer(
   project_root: pathlib.Path,
   output_dir: pathlib.Path,
   metadata: Mapping[str, Any],
+  resolution: Optional[Tuple[int, int]] = None,
 ) -> training_dataset.DatasetWriter:
-  """Creates `output_dir`, which must not exist yet."""
+  """Creates `output_dir`, which must not exist yet.
+
+  `resolution` is (width, height) when the env does not run at the contract default.
+  """
   contract = policy_contract.load_contract(project_root / CONTRACT_PATH)
+  if resolution is not None:
+    contract["default_dimensions"].update(width=resolution[0], height=resolution[1])
   return training_dataset.DatasetWriter(output_dir, contract, _jsonable(metadata))
 
 
@@ -56,25 +75,15 @@ class RolloutRecorder:
     return self._observation is not None
 
   def start_episode(
-    self, observation: Mapping[str, np.ndarray], info: Mapping[str, Any]
+    self,
+    observation: Mapping[str, np.ndarray],
+    episode_metadata: Mapping[str, Any],
   ) -> None:
     if self.episode_active:
       raise RuntimeError("Call end_episode before starting another episode.")
     if "rgb" not in observation:
       raise ValueError("Recording requires an actor_rgbd environment.")
-    robots = info["state"]["robots"]
-    self._writer.start_episode(
-      _jsonable(
-        {
-          "start_tick": 0,
-          "episode_seed": info["episode_seed"],
-          "human_spawn": info["human_spawn"],
-          "garment_spawn": info["garment_spawn"],
-          "joint_names": [[j["name"] for j in r["joints"]] for r in robots],
-          "joint_units": [[j["unit"] for j in r["joints"]] for r in robots],
-        }
-      )
-    )
+    self._writer.start_episode(_jsonable(episode_metadata))
     self._observation = _copy(observation)
     self._tick = 0
 

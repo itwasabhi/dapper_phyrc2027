@@ -72,3 +72,17 @@ Any script driving `DressingEnv(profile="actor_rgbd")` can record the same `poli
 ```
 dapper/run_py.sh /project/dapper/scripts/make_video.py /output/random_rollout/run0/policy.hdf5 --output-dir /output/videos/run0
 ```
+
+### RL training
+`dapper/src/rl/` is a Hydra + torchrl PPO stack shared by all learned behaviors; only configs and (if needed) env/reward/encoder modules change per behavior.
+- Layout: `configs/<name>.yaml` (top level; composes the `environment` and `ppo` groups), `configs/environment/<name>.yaml`, `configs/ppo/<name>.yaml` (hyperparameters plus the `model` section), `envs/` (sim env, spawn sampling, rewards, factory), `models/` (encoders, actor/critic), `ppo_builder.py`, `scripts/ppo.py`.
+- Train: `dapper/run_sim.sh python /project/dapper/src/rl/scripts/ppo.py [hydra overrides]`. Runs land in `/output/rl/<behavior>/<timestamp>/` (`actor.pt`, `critic.pt`, `trainer.pt`, `run_metadata.json` with commit and dirty flag, CSV scalars). Commit before runs whose results may be cited.
+- Check spawns visually: `dapper/run_sim.sh python /project/dapper/src/rl/scripts/env_preview.py --output-dir /output/rl/env_preview`.
+- New behavior: add `configs/environment/<name>.yaml` and `configs/ppo/<name>.yaml`, a top-level `configs/<name>.yaml`, and run with `--config-name <name>`. Select env, reward fn and encoder with `_target_`.
+- Rewards are `(previous_observation, action, observation) -> (reward, terminated)` callables injected into the env (`envs/rewards.py`); the default `zero_reward` is a placeholder.
+- Models accept any number of leading batch dims (`()`, `[B]`, `[num_envs, T]`) and read per-sample shapes from the env specs.
+- The training env picks the shirt's table itself and places robots near its corners. The policy never sees the table index; do not feed it to the policy.
+- Encoders: `RgbdCnnEncoder` (default, from scratch) or `TimmFrozenEncoder` (`ppo.model.encoder._target_=rl.models.encoders.TimmFrozenEncoder`; first run `download_models.py resnet18_timm`).
+- `torchrl==0.14.1` has no `PPOTrainer.from_env`; `ppo_builder.build_trainer` plays that role. `optim_steps_per_batch=None` is deliberate (a fixed count skips every second epoch).
+- `environment.num_envs>1` (one Isaac process per env via `ParallelEnv`) works with the fake env but failed in the sim at worker start (articulation init); treat as unverified.
+- Tests sit next to modules (`rl/envs/tests`, `rl/models/tests`, `rl/tests`); run with `dapper/run_py.sh -m pytest -p no:cacheprovider /project/dapper/src/rl -c /project/dapper/pyproject.toml`.

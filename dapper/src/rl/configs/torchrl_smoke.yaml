@@ -1,0 +1,23 @@
+defaults:
+  - environment: joint_grasp_trained0
+  - _self_
+
+seed: 0
+
+smoke:
+  frames_per_batch: 24
+  iterations: 50
+
+record:
+  enabled: false
+  # Only this many evenly spaced envs of each batch are recorded.
+  num_samples: 5
+  max_episodes_per_sample: 1
+  write_video: false
+  video_stride: 1
+
+hydra:
+  run:
+    dir: ${oc.env:DAPPER_RL_OUTPUT_DIR,/output/rl}/smoke/${now:%Y%m%d-%H%M%S}
+  job:
+    chdir: false

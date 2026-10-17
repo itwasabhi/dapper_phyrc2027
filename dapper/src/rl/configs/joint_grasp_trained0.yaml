@@ -1,0 +1,13 @@
+defaults:
+  - environment: joint_grasp_trained0
+  - ppo: joint_grasp_trained0
+  - _self_
+
+behavior: joint_grasp_trained0
+seed: 0
+
+hydra:
+  run:
+    dir: ${oc.env:DAPPER_RL_OUTPUT_DIR,/output/rl}/${behavior}/${now:%Y%m%d-%H%M%S}
+  job:
+    chdir: false

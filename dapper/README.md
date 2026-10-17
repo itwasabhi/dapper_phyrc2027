@@ -15,7 +15,12 @@ Running common scripts:
 ```
 dapper/run_py.sh -m pytest -p no:cacheprovider /project/dapper/src/tests -c /project/dapper/pyproject.toml
 dapper/run_sim.sh python /project/dapper/scripts/random_rollout.py --output-dir /output/random_rollout/run0 --overwrite --write-video
-dapper/run_sim.sh python /project/dapper/scripts/run_solution.py --solution-dir /project/dapper/src/solution-alpha --output-dir /output/solution_alpha/run0 --overwrite --write-video
+dapper/run_sim.sh python /project/dapper/scripts/run_solution.py --solution-dir /project/dapper/src/solution-alpha --output-dir /output/solution_alpha/run0 --overwrite --write-video --debug
+```
+
+Training a behavior: 
+```
+dapper/run_sim.sh python /project/dapper/src/rl/scripts/ppo.py
 ```
 
 ## Layout

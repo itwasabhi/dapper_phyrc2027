@@ -1,0 +1,28 @@
+device: cuda
+total_frames: 100000
+frames_per_batch: 512
+minibatch_size: 128
+num_epochs: 4
+learning_rate: 3.0e-4
+gamma: 0.99
+lmbda: 0.95
+clip_epsilon: 0.2
+entropy_coeff: 0.01
+critic_coeff: 1.0
+normalize_advantage: true
+clip_norm: 1.0
+logger: csv  # csv | tensorboard | none
+log_interval: 512
+save_trainer_interval: 2048
+progress_bar: true
+
+model:
+  proprio_keys: [joint_position, joint_velocity, gripper_close_command, previous_action]
+  hidden_dims: [256, 256]
+  proprio_feature_dim: 64
+  # Swap `_target_` for rl.models.encoders.TimmFrozenEncoder for the frozen pretrained option.
+  encoder:
+    _target_: rl.models.encoders.RgbdCnnEncoder
+    _partial_: true
+    cameras: [0, 1, 2, 3, 4]
+    feature_dim: 128

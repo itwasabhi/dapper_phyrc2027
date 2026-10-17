@@ -1,0 +1,10 @@
+# Sim-free env for smoke runs and tests; observations are not contract-complete, so it cannot be recorded.
+# Image: dapper-dev; no sim needed, so dapper/run_py.sh also works.
+num_envs: 1
+install_failure_handler: false
+shutdown_simulation_app: false
+env:
+  _target_: rl.envs.fake_env.FakeShirtGraspEnv
+  num_cameras: 5
+  resolution: 16
+  max_episode_steps: 8

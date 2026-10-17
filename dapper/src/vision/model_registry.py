@@ -28,6 +28,12 @@ REGISTRY: Mapping[str, ModelSpec] = {
     license="apache-2.0",
     allow_patterns=("*.json", "*.txt", "model.safetensors"),
   ),
+  "resnet18_timm": ModelSpec(
+    repo_id="timm/resnet18.a1_in1k",
+    revision="491b427b45c94c7fb0e78b5474cc919aff584bbf",
+    license="apache-2.0",
+    allow_patterns=("*.json", "model.safetensors"),
+  ),
 }
 
 
