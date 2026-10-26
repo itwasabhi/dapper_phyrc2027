@@ -81,3 +81,22 @@ def path_is_clear(
     if segment_hits_rect(start, end, rect, effective_margin):
       return False
   return True
+
+
+def rects_overlap(
+  first: scene_lib.Pose2D, second: scene_lib.Pose2D, margin: float
+) -> bool:
+  """Separating-axis test of two oriented rects, `second` inflated by `margin`."""
+  inflated = dataclasses.replace(
+    second, length=second.length + 2 * margin, width=second.width + 2 * margin
+  )
+  corners = (scene_lib.get_corners(first), scene_lib.get_corners(inflated))
+  for rect in (first, inflated):
+    for angle in (rect.yaw, rect.yaw + math.pi / 2):
+      axis = np.array([math.cos(angle), math.sin(angle)])
+      first_range, second_range = (
+        [float(corner @ axis) for corner in rect_corners] for rect_corners in corners
+      )
+      if max(first_range) < min(second_range) or max(second_range) < min(first_range):
+        return False
+  return True

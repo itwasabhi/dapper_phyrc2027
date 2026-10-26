@@ -53,3 +53,12 @@ def test_start_inside_the_clearance_band_can_leave():
   start = np.array([0.0, 0.6])  # Outside the raw box, inside the 0.25 band.
   assert collision.path_is_clear(start, np.array([0.0, 3.0]), rects, 0.25)
   assert not collision.path_is_clear(start, np.array([0.0, -3.0]), rects, 0.25)
+
+
+def test_rects_overlap_detects_rotated_rects_and_margin():
+  first = scene.Pose2D(0.0, 0.0, 0.0, 2.0, 0.2, 1.0)
+  crossing = scene.Pose2D(0.0, 0.0, math.pi / 4, 0.2, 2.0, 1.0)
+  apart = scene.Pose2D(0.0, 0.5, 0.0, 2.0, 0.2, 1.0)
+  assert collision.rects_overlap(first, crossing, 0.0)
+  assert not collision.rects_overlap(first, apart, 0.0)
+  assert collision.rects_overlap(first, apart, 0.35)

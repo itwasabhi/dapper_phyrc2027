@@ -103,10 +103,16 @@ class _FormationSpace:
     rects: Sequence[scene_lib.Pose2D],
     margin: float,
     config: PlannerConfig,
+    payload: Sequence[scene_lib.Pose2D] = (),
+    payload_rects: Sequence[scene_lib.Pose2D] = (),
+    payload_margin: float = 0.0,
   ):
     self._slots = slots
     self._rects = rects
     self._margin = margin
+    self._payload = payload
+    self._payload_rects = payload_rects
+    self._payload_margin = payload_margin
     self._config = config
     self._yaw_radius = max(float(np.linalg.norm(slot_xy)) for slot_xy, _ in slots)
     # Pairs already inside an inflated box at the start may leave it, as in path_is_clear.
@@ -115,6 +121,12 @@ class _FormationSpace:
       for robot, point in enumerate(self.get_base_points(self.to_array(start)))
       for index, rect in enumerate(rects)
       if collision.contains(rect, point, margin)
+    }
+    self._payload_exempt = {
+      (item, index)
+      for item, carried in enumerate(self.get_payload(self.to_array(start)))
+      for index, rect in enumerate(payload_rects)
+      if collision.rects_overlap(carried, rect, payload_margin)
     }
 
   @staticmethod
@@ -136,11 +148,27 @@ class _FormationSpace:
     frame = self.to_pose(state)
     return [motion.compose(frame, *slot)[0] for slot in self._slots]
 
+  def get_payload(self, state: np.ndarray) -> list[scene_lib.Pose2D]:
+    """World rects of the carried payload, given in the pair frame."""
+    frame = self.to_pose(state)
+    carried = []
+    for rect in self._payload:
+      center, yaw = motion.compose(frame, np.array([rect.x, rect.y]), rect.yaw)
+      carried.append(
+        dataclasses.replace(rect, x=float(center[0]), y=float(center[1]), yaw=yaw)
+      )
+    return carried
+
   def is_valid(self, state: np.ndarray) -> bool:
     for robot, point in enumerate(self.get_base_points(state)):
       for index, rect in enumerate(self._rects):
         margin = 0.0 if (robot, index) in self._exempt else self._margin
         if collision.contains(rect, point, margin):
+          return False
+    for item, carried in enumerate(self.get_payload(state)):
+      for index, rect in enumerate(self._payload_rects):
+        margin = 0.0 if (item, index) in self._payload_exempt else self._payload_margin
+        if collision.rects_overlap(carried, rect, margin):
           return False
     return True
 
@@ -225,12 +253,19 @@ def plan_formation_path(
   rects: Sequence[scene_lib.Pose2D],
   margin: float,
   config: PlannerConfig = PlannerConfig(),
+  payload: Sequence[scene_lib.Pose2D] = (),
+  payload_rects: Sequence[scene_lib.Pose2D] = (),
+  payload_margin: float = 0.0,
 ) -> list[scene_lib.Pose2D] | None:
   """Pair-frame waypoints (ending at `goal`) keeping both bases clear of `rects`, or None.
 
-  `slots` are each base's (xy, yaw) in the pair frame. Plans with RRT-Connect and shortcuts.
+  `slots` are each base's (xy, yaw) in the pair frame. `payload` rects, also in the pair frame
+  (e.g. the carried cloth and the span between the bases), must stay `payload_margin` clear of
+  `payload_rects`. Plans with RRT-Connect and shortcuts.
   """
-  space = _FormationSpace(start, slots, rects, margin, config)
+  space = _FormationSpace(
+    start, slots, rects, margin, config, payload, payload_rects, payload_margin
+  )
   start_state, goal_state = space.to_array(start), space.to_array(goal)
   if not space.is_valid(goal_state):
     return None

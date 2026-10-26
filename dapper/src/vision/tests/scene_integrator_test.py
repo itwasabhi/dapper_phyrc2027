@@ -136,6 +136,8 @@ def test_manikin_faces_from_torso_toward_lap():
   assert scene.manikin is not None
   assert abs(scene.manikin.yaw - math.pi / 2) < 0.2
   assert abs(scene.manikin.x) < 0.1
+  # The box is in the facing frame: length runs from the torso to the lap's far edge.
+  assert scene.manikin.length > scene.manikin.width
 
 
 def test_ignores_detections_that_mostly_cover_the_gripper():

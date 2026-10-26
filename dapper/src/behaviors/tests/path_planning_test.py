@@ -112,3 +112,19 @@ def test_formation_path_is_reproducible_for_a_seed():
   assert path_planning.plan_formation_path(*args) == path_planning.plan_formation_path(
     *args
   )
+
+
+def test_formation_path_keeps_the_payload_span_clear_of_a_rect():
+  slots = [(np.array([-1.0, 0.0]), 0.0), (np.array([1.0, 0.0]), 0.0)]
+  blocker = _table(x=0.0, y=0.0, length=0.4, width=0.4)
+  start, goal = _pose(0.0, -2.0), _pose(0.0, 2.0)
+  span = scene_lib.Pose2D(0.0, 0.0, 0.0, 2.0, 0.2, 1.0)
+  # Bases (x = +-1) clear the blocker on a straight line, but the span between them does not.
+  assert path_planning.plan_formation_path(start, goal, slots, [blocker], 0.1) == [goal]
+  path = path_planning.plan_formation_path(
+    start, goal, slots, [blocker], 0.1, payload=[span], payload_rects=[blocker]
+  )
+  assert path is not None and path != [goal]
+  for pose in path:
+    carried = scene_lib.Pose2D(pose.x, pose.y, pose.yaw, 2.0, 0.2, 1.0)
+    assert not collision.rects_overlap(carried, blocker, 0.0)

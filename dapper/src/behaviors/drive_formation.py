@@ -6,7 +6,7 @@ The pair frame has its origin at the midpoint of the two bases and the heading o
 
 import dataclasses
 import math
-from typing import Callable
+from typing import Callable, Sequence
 
 import numpy as np
 
@@ -17,6 +17,8 @@ from behaviors import path_planning
 from vision import scene as scene_lib
 
 GoalFn = Callable[[scene_lib.SceneEstimate, np.ndarray], scene_lib.Pose2D | None]
+# Pair-frame rects the formation carries, which must also stay clear of the manikin.
+PayloadFn = Callable[[], Sequence[scene_lib.Pose2D]]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -25,6 +27,7 @@ class Config:
   formation_gain: float = 1.0  # Pulls each robot back to its slot to cancel drift.
   collision_config: collision.CollisionConfig = collision.CollisionConfig()
   planner: path_planning.PlannerConfig = path_planning.PlannerConfig()
+  payload_clearance_m: float = 0.1
   waypoint_tolerance_m: float = 0.2
   waypoint_tolerance_rad: float = 0.2
   timeout_s: float = 60.0
@@ -38,8 +41,10 @@ class DriveFormation:
     goal_fn: GoalFn,
     cfg: base.BehaviorCfg = base.BehaviorCfg(),
     config: Config = Config(),
+    payload_fn: PayloadFn | None = None,
   ):
     self._goal_fn = goal_fn
+    self._payload_fn = payload_fn
     self._config = config
     self._timeout_steps = round(config.timeout_s * cfg.policy_hz)
     self._state: base.BehaviorState | None = None
@@ -86,6 +91,8 @@ class DriveFormation:
       return action
 
     if self._goal_moved(goal):
+      scene = self._state.scene
+      payload = self._payload_fn() if self._payload_fn else ()
       self._path = path_planning.plan_formation_path(
         frame,
         goal,
@@ -93,6 +100,9 @@ class DriveFormation:
         collision.obstacles(self._state.scene),
         self._config.collision_config.obstacle_clearance_m,
         self._config.planner,
+        payload=payload,
+        payload_rects=(scene.manikin,) if scene.manikin is not None else (),
+        payload_margin=self._config.payload_clearance_m,
       )
       self._path_index = 0
       self._planned_goal = goal

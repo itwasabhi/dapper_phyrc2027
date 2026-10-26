@@ -357,9 +357,20 @@ class BasicSceneIntegrator:
     limbs = limb_xy.mean(axis=0)
     facing = math.atan2(limbs[1] - head[1], limbs[0] - head[0])
     footprint = np.concatenate([self._world_xy(component), limb_xy])
-    rect = scene_lib.fit_rect(footprint, float(belief["manikin"][component].mean()))
-    return dataclasses.replace(
-      rect, x=float(footprint[:, 0].mean()), y=float(footprint[:, 1].mean()), yaw=facing
+    # Bounding box in the facing frame, so `length` runs along the facing direction.
+    forward = np.array([math.cos(facing), math.sin(facing)])
+    left = np.array([-forward[1], forward[0]])
+    along, across = footprint @ forward, footprint @ left
+    center = (along.min() + along.max()) / 2 * forward + (
+      across.min() + across.max()
+    ) / 2 * left
+    return scene_lib.Pose2D(
+      float(center[0]),
+      float(center[1]),
+      facing,
+      float(along.max() - along.min()),
+      float(across.max() - across.min()),
+      float(belief["manikin"][component].mean()),
     )
 
   def _render(self, height, belief, scene, robot_xy) -> np.ndarray:

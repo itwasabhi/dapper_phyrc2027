@@ -1,4 +1,4 @@
-"""solution-alpha: scans the room, drives the robots beside the shirt's hem corners, and pinches them.
+"""solution-alpha: scans the room, grasps the shirt's hem corners, and carries it to the manikin.
 
 Set DAPPER_DEBUG_DIR (run_solution.py --debug does) so scan_room writes annotated frames and
 scene_estimate.json under <debug-dir>/scan_room/.
@@ -9,6 +9,7 @@ import pathlib
 
 from behaviors import base
 from behaviors import down_and_pinch
+from behaviors import drive_shirt_to_manikin
 from behaviors import drive_to_shirt
 from behaviors import execution_utils
 from behaviors import scan_room
@@ -40,4 +41,6 @@ def load_policy(checkpoint, observation_space, action_space):
   drive = drive_to_shirt.DriveToShirtHemCorners(cfg=cfg)
   pinch = down_and_pinch.DownAndPinch(shirt_grasp.get_hem_grasp_targets, cfg=cfg)
 
-  return execution_utils.SequencedPolicy([scan, drive, pinch])
+  carry = drive_shirt_to_manikin.DriveShirtToManikin(cfg=cfg)
+
+  return execution_utils.SequencedPolicy([scan, drive, pinch, carry])
