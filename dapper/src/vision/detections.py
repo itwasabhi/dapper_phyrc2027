@@ -13,12 +13,17 @@ CAMERA_NAMES = (
 )
 
 DEFAULT_PROMPTS: Mapping[str, Sequence[str]] = {
-  "box": ("white box"),
-  "shirt": ("t-shirt with yellow collar",),
+  "box": ("white box",),
+  # Best recall in eval_detector; its false positives (white boxes, robot bodies) carry no shirt
+  # color, so the scene integrator's color gate drops them.
+  "shirt": ("blue cloth",),
   "manikin": ("mannequin", "person"),
   "chair": ("stool", "chair"),
   "robot": ("robot",),
 }
+
+# Per-class score thresholds; classes not listed use the detector's score_threshold.
+DEFAULT_CLASS_THRESHOLDS: Mapping[str, float] = {}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -34,11 +39,26 @@ def prompt_to_class(prompts: Mapping[str, Sequence[str]]) -> dict[str, str]:
   """Inverts a class -> prompts map; each prompt must belong to one class."""
   mapping = {}
   for class_name, class_prompts in prompts.items():
+    if isinstance(class_prompts, str):
+      raise TypeError(
+        f"Prompts for {class_name!r} must be a sequence of strings, not a str"
+      )
     for prompt in class_prompts:
       if prompt in mapping:
         raise ValueError(f"Prompt {prompt!r} assigned to multiple classes")
       mapping[prompt] = class_name
   return mapping
+
+
+def parse_prompt_specs(specs: Sequence[str]) -> dict[str, tuple[str, ...]]:
+  """Parses "class=prompt1|prompt2" strings; classes not given keep their DEFAULT_PROMPTS."""
+  prompts = dict(DEFAULT_PROMPTS)
+  for spec in specs:
+    class_name, separator, joined = spec.partition("=")
+    if not separator or not joined:
+      raise ValueError(f"Expected class=prompt1|prompt2, got {spec!r}")
+    prompts[class_name] = tuple(joined.split("|"))
+  return prompts
 
 
 def to_jsonable(

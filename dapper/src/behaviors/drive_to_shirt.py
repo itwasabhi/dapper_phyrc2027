@@ -1,62 +1,84 @@
-"""drive_to_shirt: drives each robot to its own standoff corner beside the shirt scan_room found."""
+"""drive_to_shirt: drives each robot to its own standoff pose beside the shirt scan_room found."""
 
-import dataclasses
+import functools
 
 import numpy as np
 
 from behaviors import base
-from behaviors import motion
+from behaviors import drive_independent
+from behaviors import shirt_grasp
 from vision import scene as scene_lib
 
-
-@dataclasses.dataclass(frozen=True)
-class Config:
-  drive: motion.DriveConfig = motion.DriveConfig()
-  timeout_s: float = 20.0  # Safety bound if convergence stalls.
+Config = drive_independent.Config
 
 
-class DriveToShirt:
-  """Reads state.scene (populated by scan_room) and drives both robots toward the shirt."""
+def _shirt_goals(
+  scene: scene_lib.SceneEstimate, base_pose: np.ndarray
+) -> tuple[scene_lib.Pose2D | None, scene_lib.Pose2D | None]:
+  # No shirt detected yields None goals, so the robots hold rather than drive blindly.
+  return tuple(
+    scene_lib.shirt_approach_pose(scene, tuple(base_pose[robot, :2]))
+    for robot in range(2)
+  )
 
-  def __init__(
-    self, cfg: base.BehaviorCfg = base.BehaviorCfg(), config: Config = Config()
-  ):
-    self._config = config
-    self._timeout_steps = round(config.timeout_s * cfg.policy_hz)
-    self._state: base.BehaviorState | None = None
-    self._step = 0
-    self._reached = (False, False)
 
-  def reset(self, state: base.BehaviorState) -> None:
-    self._state = state
-    self._step = 0
-    self._reached = (False, False)
+def DriveToShirt(
+  cfg: base.BehaviorCfg = base.BehaviorCfg(), config: Config = Config()
+) -> drive_independent.DriveIndependent:
+  return drive_independent.DriveIndependent(_shirt_goals, cfg=cfg, config=config)
 
-  def step(self, observation) -> np.ndarray:
-    base_pose = np.asarray(observation["base_pose_world"])
-    action = np.zeros((2, 9), dtype=np.float32)
-    reached = []
-    for robot in range(2):
-      current_xy = base_pose[robot, :2]
-      goal = scene_lib.shirt_approach_pose(self._state.scene, tuple(current_xy))
-      if goal is None:
-        # No shirt detected: hold position rather than drive blindly.
-        reached.append(True)
-        continue
-      current_yaw = motion.yaw_from_base_pose(base_pose[robot])
-      command = motion.drive_toward(current_xy, current_yaw, goal, self._config.drive)
-      action[robot, motion.FORWARD_COLUMN] = command[0]
-      action[robot, motion.LEFT_COLUMN] = command[1]
-      action[robot, motion.YAW_COLUMN] = command[2]
-      reached.append(
-        motion.within_tolerance(current_xy, current_yaw, goal, self._config.drive)
-      )
-    self._reached = tuple(reached)
-    self._step += 1
-    return action
 
-  def done(self) -> bool:
-    return all(self._reached) or self._step >= self._timeout_steps
+def _get_corner_goals(
+  scene: scene_lib.SceneEstimate, base_pose: np.ndarray
+) -> tuple[scene_lib.Pose2D | None, scene_lib.Pose2D | None]:
+  positions = base_pose[:, :2].astype(float)
+  target = (
+    (scene.manikin.x, scene.manikin.y)
+    if scene.manikin is not None
+    else tuple(positions.mean(axis=0))
+  )
+  corners = scene_lib.get_shirt_table_corner_poses(scene, target)
+  if corners is None:
+    return None, None
 
-  def close(self) -> None:
-    pass
+  def total_distance(order):
+    return sum(
+      np.linalg.norm(positions[robot] - [corners[index].x, corners[index].y])
+      for robot, index in enumerate(order)
+    )
+
+  first, second = min(((0, 1), (1, 0)), key=total_distance)
+  return corners[first], corners[second]
+
+
+def DriveToShirtCorners(
+  cfg: base.BehaviorCfg = base.BehaviorCfg(), config: Config = Config()
+) -> drive_independent.DriveIndependent:
+  return drive_independent.DriveIndependent(_get_corner_goals, cfg=cfg, config=config)
+
+
+def _get_hem_corner_goals(
+  scene: scene_lib.SceneEstimate,
+  base_pose: np.ndarray,
+  config: Config,
+  grasp_config: shirt_grasp.HemGraspConfig,
+) -> tuple[scene_lib.Pose2D | None, scene_lib.Pose2D | None]:
+  grasps = shirt_grasp.get_hem_grasps(
+    scene, config.collision_config.obstacle_clearance_m, grasp_config
+  )
+  goals = tuple(grasp.base_pose if grasp else None for grasp in grasps)
+  goal_xy = tuple(np.array([g.x, g.y]) if g else None for g in goals)
+  return shirt_grasp.assign_to_robots(goals, goal_xy, base_pose)
+
+
+def DriveToShirtHemCorners(
+  cfg: base.BehaviorCfg = base.BehaviorCfg(),
+  config: Config = Config(),
+  grasp_config: shirt_grasp.HemGraspConfig = shirt_grasp.HemGraspConfig(),
+) -> drive_independent.DriveIndependent:
+  """Each robot stands beside one hem corner of the shirt, facing across it, within arm reach."""
+  return drive_independent.DriveIndependent(
+    functools.partial(_get_hem_corner_goals, config=config, grasp_config=grasp_config),
+    cfg=cfg,
+    config=config,
+  )

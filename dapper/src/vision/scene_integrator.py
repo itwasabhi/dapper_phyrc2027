@@ -7,9 +7,11 @@ import cv2
 import numpy as np
 
 from vision import camera_geometry
+from vision import color_mask
 from vision import detections as detections_lib
 from vision import detector_factory
 from vision import scene as scene_lib
+from vision import shirt_orientation
 
 CLASSES = tuple(detections_lib.DEFAULT_PROMPTS)
 ROBOT_CAMERAS = detections_lib.CAMERA_NAMES[1:]
@@ -34,6 +36,21 @@ class GridConfig:
   min_table_area_m2: float = 0.15
   min_table_belief: float = 0.1
   shirt_belief: float = 0.3
+  # A shirt box votes only on its color-mask pixels when at least this many fall inside it.
+  shirt_min_color_pixels: int = 10
+  # With a color prior, drop shirt boxes holding too few shirt-colored pixels (e.g. the manikin's
+  # own striped top) instead of voting on the whole box.
+  shirt_require_color: bool = True
+  # Box filter (cells) over shirt votes and seen counts; fills gaps from sparse far-range samples.
+  shirt_smooth_cells: int = 5
+  # A shirt cell is trim when this share of its shirt-colored samples are trim-colored.
+  shirt_trim_share: float = 0.5
+  shirt_trim_min_samples: int = 2
+  # Trim is searched this far around the shirt component, which can miss sparsely seen edges.
+  shirt_trim_search_m: float = 0.1
+  orientation: shirt_orientation.OrientationConfig = (
+    shirt_orientation.OrientationConfig()
+  )
   manikin_belief: float = 0.2
   manikin_min_height_m: float = 0.9
   head_band_m: float = 0.2
@@ -50,10 +67,13 @@ class BasicSceneIntegrator:
     detector: detector_factory.Detector,
     mounts: camera_geometry.CameraMounts,
     config: GridConfig = GridConfig(),
+    shirt_color: color_mask.ShirtColorConfig | None = color_mask.ShirtColorConfig(),
   ):
+    """`shirt_color` refines shirt boxes to shirt-colored pixels; None votes on whole boxes."""
     self._detector = detector
     self._mounts = mounts
     self._config = config
+    self._shirt_color = shirt_color
     self._origin = np.array([config.x_range_m[0], config.y_range_m[0]])
     self._shape = (
       round((config.y_range_m[1] - config.y_range_m[0]) / config.cell_m),
@@ -66,6 +86,8 @@ class BasicSceneIntegrator:
     self._seen = np.zeros(self._shape, np.float32)
     self._height = np.zeros(self._shape, np.float32)
     self._votes = np.zeros((len(CLASSES), *self._shape), np.float32)
+    self._shirt_body = np.zeros(self._shape, np.float32)
+    self._shirt_trim = np.zeros(self._shape, np.float32)
     self._scene = scene_lib.SceneEstimate()
 
   def update(self, observation) -> scene_lib.SceneEstimate:
@@ -85,6 +107,7 @@ class BasicSceneIntegrator:
     for index, name in enumerate(ROBOT_CAMERAS):
       self._integrate(
         name,
+        rgb[index + 1],
         depth[index + 1],
         valid[index + 1],
         detections[index],
@@ -94,21 +117,35 @@ class BasicSceneIntegrator:
     self._scene = self._fit(base_pose[:, :2], detections)
     return self._scene
 
-  def _integrate(self, name, depth, valid, detections, world_from_optical, robot_xy):
+  def _integrate(
+    self, name, rgb, depth, valid, detections, world_from_optical, robot_xy
+  ):
     config = self._config
     stride = config.pixel_stride
+    shirt_pixels = shirt_body = shirt_trim = None
+    if self._shirt_color is not None and any(
+      detection.class_name == "shirt" for detection in detections
+    ):
+      shirt_pixels = color_mask.get_shirt_mask(rgb, self._shirt_color)[
+        ::stride, ::stride
+      ]
+      shirt_body, shirt_trim = (
+        part[::stride, ::stride]
+        for part in color_mask.get_shirt_parts(rgb, self._shirt_color)
+      )
     depth = depth[::stride, ::stride, 0]
     valid = valid[::stride, ::stride, 0]
     is_wrist = name in camera_geometry.WRIST_CAMERA_NAMES
     near = (depth > 0) & (depth < config.wrist_min_depth_m)
     if is_wrist:
       valid = valid & ~near
-    score_map = self._score_map(detections, near if is_wrist else None, depth.shape)
-
-    points, pixel_index = camera_geometry.backproject(
-      depth, valid, camera_geometry.intrinsics(depth.shape[1])
+    score_map = self._score_map(
+      detections, near if is_wrist else None, depth.shape, shirt_pixels
     )
-    world = points @ world_from_optical[:3, :3].T + world_from_optical[:3, 3]
+
+    world, pixel_index = camera_geometry.get_world_points(
+      depth, valid, world_from_optical
+    )
     keep = world[:, 2] > config.floor_z_m
     for center in robot_xy:
       keep &= np.linalg.norm(world[:, :2] - center, axis=1) > config.robot_radius_m
@@ -128,8 +165,18 @@ class BasicSceneIntegrator:
       self._votes[class_index] += np.bincount(
         flat, weights=weights, minlength=size
       ).reshape(self._shape)
+    if shirt_pixels is not None:
+      in_shirt_box = score_map[CLASSES.index("shirt")] > 0
+      for part, accumulator in (
+        (shirt_body, self._shirt_body),
+        (shirt_trim, self._shirt_trim),
+      ):
+        weights = (in_shirt_box & part).reshape(-1)[pixel_index]
+        accumulator += np.bincount(flat, weights=weights, minlength=size).reshape(
+          self._shape
+        )
 
-  def _score_map(self, detections, near, image_shape):
+  def _score_map(self, detections, near, image_shape, shirt_pixels):
     config = self._config
     stride = config.pixel_stride
     score_map = np.zeros((len(CLASSES), *image_shape), np.float32)
@@ -139,6 +186,17 @@ class BasicSceneIntegrator:
         box_near = near[max(int(y0), 0) : int(y1) + 1, max(int(x0), 0) : int(x1) + 1]
         if box_near.size and box_near.mean() > config.wrist_near_box_fraction:
           continue
+      class_map = score_map[CLASSES.index(detection.class_name)]
+      if detection.class_name == "shirt" and shirt_pixels is not None:
+        rows = slice(max(int(y0), 0), int(math.ceil(y1)))
+        cols = slice(max(int(x0), 0), int(math.ceil(x1)))
+        inside = shirt_pixels[rows, cols]
+        if inside.sum() >= config.shirt_min_color_pixels:
+          region = class_map[rows, cols]
+          region[inside] = np.maximum(region[inside], detection.score)
+          continue
+        if config.shirt_require_color:
+          continue
       half_w, half_h = (
         (x1 - x0) / 2 * config.box_shrink,
         (y1 - y0) / 2 * config.box_shrink,
@@ -146,7 +204,7 @@ class BasicSceneIntegrator:
       center_x, center_y = (x0 + x1) / 2, (y0 + y1) / 2
       rows = slice(max(int(center_y - half_h), 0), int(center_y + half_h) + 1)
       cols = slice(max(int(center_x - half_w), 0), int(center_x + half_w) + 1)
-      region = score_map[CLASSES.index(detection.class_name), rows, cols]
+      region = class_map[rows, cols]
       np.maximum(region, detection.score, out=region)
     return score_map
 
@@ -177,9 +235,9 @@ class BasicSceneIntegrator:
       for index, name in enumerate(CLASSES)
     }
     tables, table_mask = self._fit_tables(seen, height, belief["box"])
-    shirt, shirt_table = self._fit_shirt(seen, belief["shirt"], table_mask, tables)
+    shirt_fields = self._fit_shirt(seen, height, table_mask, tables)
     manikin = self._fit_manikin(seen, height, belief, table_mask)
-    result = scene_lib.SceneEstimate(tables, shirt, shirt_table, manikin)
+    result = scene_lib.SceneEstimate(tables=tables, manikin=manikin, **shirt_fields)
     return dataclasses.replace(
       result,
       debug_image=self._render(height, belief, result, robot_xy),
@@ -204,38 +262,70 @@ class BasicSceneIntegrator:
       mean_belief = float(box_belief[component].mean())
       if mean_belief < config.min_table_belief:
         continue
-      tables.append(_fit_rect(self._world_xy(component), mean_belief))
+      tables.append(scene_lib.fit_rect(self._world_xy(component), mean_belief))
       kept |= component
     tables.sort(key=lambda pose: (pose.x, pose.y))
     return tuple(tables), kept
 
-  def _fit_shirt(self, seen, shirt_belief, table_mask, tables):
+  def _fit_shirt(self, seen, height, table_mask, tables) -> dict:
+    """Shirt fields of SceneEstimate; empty when no shirt is found."""
     config = self._config
-    near_table = cv2.dilate(
-      table_mask.astype(np.uint8), np.ones((5, 5), np.uint8)
-    ).astype(bool)
-    cells = seen & (shirt_belief >= config.shirt_belief) & near_table
+    size = (config.shirt_smooth_cells,) * 2
+    votes = cv2.boxFilter(
+      self._votes[CLASSES.index("shirt")], -1, size, normalize=False
+    )
+    counts = cv2.boxFilter(self._seen, -1, size, normalize=False)
+    shirt_belief = votes / np.maximum(counts, 1)
+    if table_mask.any():
+      support = cv2.dilate(
+        table_mask.astype(np.uint8), np.ones((5, 5), np.uint8)
+      ).astype(bool)
+    else:
+      low, high = config.table_height_range_m
+      support = (height >= low) & (height <= high + config.table_band_m)
+    cells = seen & (shirt_belief >= config.shirt_belief) & support
     components = self._components(cells, 10)
     if not components:
-      return None, None
+      return {}
     component = components[0]
-    points = self._world_xy(component)
-    center = points.mean(axis=0)
-    eigenvalues, eigenvectors = np.linalg.eigh(np.cov(points.T))
-    major = eigenvectors[:, 1]
-    yaw = math.atan2(major[1], major[0]) % math.pi
-    along = (points - center) @ major
-    across = (points - center) @ eigenvectors[:, 0]
-    pose = scene_lib.Pose2D(
-      float(center[0]),
-      float(center[1]),
-      yaw,
-      float(np.ptp(along)),
-      float(np.ptp(across)),
+    orientation = shirt_orientation.estimate_orientation(
+      self._world_xy(component),
+      self._world_xy(self._get_trim_cells(component)),
       float(shirt_belief[component].mean()),
+      config.orientation,
     )
-    containing = [i for i, table in enumerate(tables) if _contains(table, center)]
-    return pose, (containing[0] if containing else None)
+    # Cell centers span one cell less than the cells themselves.
+    pose = dataclasses.replace(
+      orientation.pose,
+      length=orientation.pose.length + config.cell_m,
+      width=orientation.pose.width + config.cell_m,
+    )
+    center = np.array([pose.x, pose.y])
+    containing = [
+      i for i, table in enumerate(tables) if scene_lib.contains_point(table, center)
+    ]
+    return {
+      "shirt": pose,
+      "shirt_table": containing[0] if containing else None,
+      "shirt_heading_margin": orientation.margin,
+      "shirt_hem_corners": tuple(
+        (float(corner[0]), float(corner[1])) for corner in orientation.hem_corners
+      ),
+      "shirt_hem_seen": orientation.hem_seen,
+      "shirt_height_m": float(np.median(height[component])),
+    }
+
+  def _get_trim_cells(self, component: np.ndarray) -> np.ndarray:
+    """Cells near the shirt component whose shirt-colored samples are mostly trim."""
+    config = self._config
+    samples = self._shirt_body + self._shirt_trim
+    trim = (samples >= config.shirt_trim_min_samples) & (
+      self._shirt_trim >= config.shirt_trim_share * samples
+    )
+    radius = round(config.shirt_trim_search_m / config.cell_m)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1,) * 2)
+    near = cv2.dilate(component.astype(np.uint8), kernel)
+    return trim & near.astype(bool)
 
   def _fit_manikin(self, seen, height, belief, table_mask):
     config = self._config
@@ -267,7 +357,7 @@ class BasicSceneIntegrator:
     limbs = limb_xy.mean(axis=0)
     facing = math.atan2(limbs[1] - head[1], limbs[0] - head[0])
     footprint = np.concatenate([self._world_xy(component), limb_xy])
-    rect = _fit_rect(footprint, float(belief["manikin"][component].mean()))
+    rect = scene_lib.fit_rect(footprint, float(belief["manikin"][component].mean()))
     return dataclasses.replace(
       rect, x=float(footprint[:, 0].mean()), y=float(footprint[:, 1].mean()), yaw=facing
     )
@@ -292,8 +382,18 @@ class BasicSceneIntegrator:
       if p
     ]
     for pose, color in footprints:
-      corners = np.array([to_pixel(c) for c in _corners(pose)], np.int32)
+      corners = np.array([to_pixel(c) for c in scene_lib.get_corners(pose)], np.int32)
       cv2.polylines(image, [corners], True, color, 1)
+    for corner in scene.shirt_hem_corners or ():
+      cv2.circle(image, to_pixel(corner), 3, (255, 255, 0), -1)
+    if scene.shirt is not None:
+      tip = [
+        scene.shirt.x + 0.4 * math.cos(scene.shirt.yaw),
+        scene.shirt.y + 0.4 * math.sin(scene.shirt.yaw),
+      ]
+      cv2.arrowedLine(
+        image, to_pixel([scene.shirt.x, scene.shirt.y]), to_pixel(tip), (0, 255, 255), 1
+      )
     if scene.manikin is not None:
       tip = [
         scene.manikin.x + 0.5 * math.cos(scene.manikin.yaw),
@@ -317,38 +417,3 @@ def _align_to_all_cameras(detections):
     tuple(dataclasses.replace(d, camera=d.camera + 1) for d in camera)
     for camera in detections
   )
-
-
-def _fit_rect(points: np.ndarray, confidence: float) -> scene_lib.Pose2D:
-  corners = cv2.boxPoints(cv2.minAreaRect(points.astype(np.float32)))
-  edges = [corners[(i + 1) % 4] - corners[i] for i in range(4)]
-  long_edge = max(edges[:2], key=np.linalg.norm)
-  other = min(edges[:2], key=np.linalg.norm)
-  center = corners.mean(axis=0)
-  return scene_lib.Pose2D(
-    float(center[0]),
-    float(center[1]),
-    math.atan2(long_edge[1], long_edge[0]) % math.pi,
-    float(np.linalg.norm(long_edge)),
-    float(np.linalg.norm(other)),
-    confidence,
-  )
-
-
-def _corners(pose: scene_lib.Pose2D) -> list[np.ndarray]:
-  forward = np.array([math.cos(pose.yaw), math.sin(pose.yaw)]) * pose.length / 2
-  left = np.array([-math.sin(pose.yaw), math.cos(pose.yaw)]) * pose.width / 2
-  center = np.array([pose.x, pose.y])
-  return [
-    center + forward + left,
-    center - forward + left,
-    center - forward - left,
-    center + forward - left,
-  ]
-
-
-def _contains(pose: scene_lib.Pose2D, xy: np.ndarray) -> bool:
-  offset = np.asarray(xy) - np.array([pose.x, pose.y])
-  along = offset @ np.array([math.cos(pose.yaw), math.sin(pose.yaw)])
-  across = offset @ np.array([-math.sin(pose.yaw), math.cos(pose.yaw)])
-  return abs(along) <= pose.length / 2 and abs(across) <= pose.width / 2

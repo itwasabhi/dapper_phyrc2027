@@ -34,3 +34,16 @@ def test_omdet_returns_one_list_per_camera():
   detector = detector_factory.make_omdet_turbo(PROMPTS, device="cpu")
   per_camera = detector.detect(np.zeros((5, 256, 256, 3), np.uint8))
   assert len(per_camera) == 5
+
+
+def test_make_detections_applies_class_thresholds():
+  prompt_classes = {"white box": "box", "stool": "chair"}
+  detections = detector_factory._make_detections(
+    camera=1,
+    boxes=np.zeros((2, 4)),
+    scores=np.array([0.2, 0.2]),
+    labels=["white box", "stool"],
+    prompt_classes=prompt_classes,
+    class_thresholds={"box": 0.15, "chair": 0.3},
+  )
+  assert [detection.class_name for detection in detections] == ["box"]

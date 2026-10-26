@@ -1,4 +1,4 @@
-"""solution-alpha: scans the room, then drives both robots to the shirt.
+"""solution-alpha: scans the room, drives the robots beside the shirt's hem corners, and pinches them.
 
 Set DAPPER_DEBUG_DIR (run_solution.py --debug does) so scan_room writes annotated frames and
 scene_estimate.json under <debug-dir>/scan_room/.
@@ -8,9 +8,11 @@ import os
 import pathlib
 
 from behaviors import base
+from behaviors import down_and_pinch
 from behaviors import drive_to_shirt
 from behaviors import execution_utils
 from behaviors import scan_room
+from behaviors import shirt_grasp
 from vision import camera_geometry
 from vision import detector_factory
 from vision import scene_integrator
@@ -35,27 +37,7 @@ def load_policy(checkpoint, observation_space, action_space):
     cfg=cfg,
     debug_dir=pathlib.Path(debug_dir) / "scan_room" if debug_dir else None,
   )
-  drive = drive_to_shirt.DriveToShirt(cfg=cfg)
+  drive = drive_to_shirt.DriveToShirtHemCorners(cfg=cfg)
+  pinch = down_and_pinch.DownAndPinch(shirt_grasp.get_hem_grasp_targets, cfg=cfg)
 
-  class SequencedPolicy:
-    def __init__(self, behaviors):
-      self._behaviors = behaviors
-      self._index = 0
-      self._state = None
-
-    def reset(self):
-      self._index = 0
-      self._state = execution_utils.create_initial_state()
-      self._behaviors[0].reset(self._state)
-
-    def __call__(self, observation):
-      action, self._index = execution_utils.execute_sequence(
-        self._behaviors, self._index, observation, self._state
-      )
-      return action
-
-    def close(self):
-      for behavior in self._behaviors:
-        behavior.close()
-
-  return SequencedPolicy([scan, drive])
+  return execution_utils.SequencedPolicy([scan, drive, pinch])

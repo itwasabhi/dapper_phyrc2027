@@ -1,18 +1,19 @@
 """Resets ShirtGraspEnv several times and saves camera tiles to check robot/shirt placement.
 
-Run: dapper/run_sim.sh python /project/dapper/src/rl/scripts/env_preview.py --output-dir /output/rl/env_preview
+Run: dapper/run_sim.sh python /project/dapper/src/rl/scripts/env_preview.py [--log-dir-prefix P]
 """
 
 import argparse
-import pathlib
 
 import numpy as np
 from PIL import Image
 
+import utils_run_dir
+
 
 def main() -> None:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("--output-dir", type=pathlib.Path, required=True)
+  utils_run_dir.add_log_dir_flags(parser)
   parser.add_argument("--resets", type=int, default=6)
   parser.add_argument("--steps", type=int, default=3)
   parser.add_argument("--resolution", type=int, default=256)
@@ -20,7 +21,8 @@ def main() -> None:
   parser.add_argument("--pairing", default="random_pair")
   parser.add_argument("--seed", type=int, default=0)
   args = parser.parse_args()
-  args.output_dir.mkdir(parents=True, exist_ok=True)
+  output_dir = utils_run_dir.log_dir_from_args("env_preview", args)
+  output_dir.mkdir(parents=True, exist_ok=True)
 
   import policy_cli  # pylint: disable=import-outside-toplevel
 
@@ -49,8 +51,8 @@ def main() -> None:
         env.action_space.sample() * 0.0
       )
     tile = np.concatenate(list(observation["rgb"]), axis=1)
-    Image.fromarray(tile).save(args.output_dir / f"reset_{reset_index:02d}.png")
-  print(f"Wrote tiles to {args.output_dir}", flush=True)
+    Image.fromarray(tile).save(output_dir / f"reset_{reset_index:02d}.png")
+  print(f"Wrote tiles to {output_dir}", flush=True)
   env.close()
   shirt_grasp_env.close_simulation_app()
 

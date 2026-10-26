@@ -5,9 +5,11 @@ defaults:
 
 behavior: joint_grasp_trained0
 seed: 0
+log_dir_prefix: ""
+log_dir_name: null
 
 hydra:
   run:
-    dir: ${oc.env:DAPPER_RL_OUTPUT_DIR,/output/rl}/${behavior}/${now:%Y%m%d-%H%M%S}
+    dir: ${run_dir:${log_dir_prefix},${log_dir_name}}
   job:
     chdir: false

@@ -3,6 +3,8 @@ defaults:
   - _self_
 
 seed: 0
+log_dir_prefix: ""
+log_dir_name: null
 
 smoke:
   frames_per_batch: 24
@@ -18,6 +20,6 @@ record:
 
 hydra:
   run:
-    dir: ${oc.env:DAPPER_RL_OUTPUT_DIR,/output/rl}/smoke/${now:%Y%m%d-%H%M%S}
+    dir: ${run_dir:${log_dir_prefix},${log_dir_name}}
   job:
     chdir: false

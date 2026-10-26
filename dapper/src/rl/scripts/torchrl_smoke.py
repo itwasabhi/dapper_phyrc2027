@@ -18,6 +18,7 @@ from torchrl import envs
 from Policy import contract as policy_contract
 
 import utils_rollout_recorder
+import utils_run_dir
 from rl import rollout_recording
 from rl.envs import factory
 
@@ -123,4 +124,5 @@ def main(config) -> None:
 
 
 if __name__ == "__main__":
+  utils_run_dir.install_hydra_support("torchrl_smoke")
   main()

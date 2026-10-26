@@ -41,3 +41,16 @@ def test_camera_world_poses_chain_base_grasp_and_mounts():
     "robot_0_wrist",
     "robot_1_wrist",
   }
+
+
+def test_get_world_points_applies_pose():
+  depth = np.full((4, 4, 1), 2.0, np.float32)
+  valid = np.zeros((4, 4, 1), bool)
+  valid[2, 2] = True
+  world_from_optical = np.eye(4)
+  world_from_optical[:3, 3] = (1.0, 2.0, 3.0)
+  world, pixel_index = camera_geometry.get_world_points(
+    depth, valid, world_from_optical
+  )
+  np.testing.assert_allclose(world, [[1.0, 2.0, 5.0]])
+  assert pixel_index.tolist() == [10]
