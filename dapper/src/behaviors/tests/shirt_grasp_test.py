@@ -1,3 +1,4 @@
+import dataclasses
 import math
 
 import numpy as np
@@ -75,3 +76,29 @@ def test_targets_go_to_the_nearer_robot():
   base_pose[1, :2] = (2.0, 0.0)
   first, second = shirt_grasp.get_hem_grasp_targets(_scene(), base_pose)
   assert first[0] < 0 < second[0]
+
+
+def test_blocked_side_approach_swings_toward_the_hem():
+  # Collar toward -y on a table rotated 45 degrees, so the straight side approach to each
+  # corner runs into the table.
+  scene = dataclasses.replace(
+    _scene(), tables=(scene_lib.Pose2D(0.0, 0.0, math.pi / 4, 1.4, 1.4, 1.0),)
+  )
+  grasps = shirt_grasp.get_hem_grasps(scene, CLEARANCE_M)
+  assert all(grasp is not None for grasp in grasps)
+  for grasp in grasps:
+    pose = grasp.base_pose
+    assert not collision.contains(
+      scene.tables[0], np.array([pose.x, pose.y]), CLEARANCE_M
+    )
+    point_base = motion.world_to_body(
+      grasp.point_xy - np.array([pose.x, pose.y]), pose.yaw
+    )
+    assert abs(point_base[1] - arm.GRIPPER_ORIGIN_Y) < 1e-6
+  # Swung toward the hem side (+y), not straight across.
+  assert all(grasp.base_pose.y > 0.4 for grasp in grasps)
+  gap = math.hypot(
+    grasps[0].base_pose.x - grasps[1].base_pose.x,
+    grasps[0].base_pose.y - grasps[1].base_pose.y,
+  )
+  assert gap >= collision.CollisionConfig().robot_clearance_m

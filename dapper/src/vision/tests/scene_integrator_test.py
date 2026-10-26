@@ -7,14 +7,20 @@ from vision import color_mask
 from vision import detections as detections_lib
 from vision import detector_factory
 from vision import scene_integrator
+from vision import shirt_orientation
 
 SIZE = 256
 CAMERA_XY = (1.0, 0.5)
 CAMERA_HEIGHT = 3.0
 FOCAL = camera_geometry.intrinsics(SIZE)[0, 0]
 # Coarse cells keep the test fast; shirt smoothing is off since shirts span few cells.
+# Trim cells link into clusters only within trim_link_m, so it must exceed the cell size.
 CONFIG = scene_integrator.GridConfig(
-  cell_m=0.05, robot_radius_m=0.1, update_every_n_calls=1, shirt_smooth_cells=1
+  cell_m=0.05,
+  robot_radius_m=0.1,
+  update_every_n_calls=1,
+  shirt_smooth_cells=1,
+  orientation=shirt_orientation.OrientationConfig(trim_link_m=0.08),
 )
 HEAD_0, WRIST_0 = (
   2,

@@ -103,3 +103,27 @@ def test_hem_corners_fall_back_to_the_footprint_without_trim():
   left, right = result.hem_corners
   assert left[0] < -0.25 and right[0] < -0.25
   assert left[1] > 0 > right[1]
+
+
+@pytest.mark.parametrize("heading_deg", (135, -60))
+def test_collar_alone_points_the_heading_when_the_hem_is_specks(heading_deg):
+  footprint, _ = _tshirt()
+  collar = _grid((0.18, 0.3), (-0.06, 0.06))
+  # Sparse, unconnected hem cells, as when the hem faces away from every camera.
+  hem_specks = np.array([[-0.29, v] for v in (-0.2, -0.05, 0.12)])
+  heading = math.radians(heading_deg)
+  center = np.array([3.0, -1.5])
+  result = shirt_orientation.estimate_orientation(
+    _to_world(footprint, heading, center),
+    _to_world(np.concatenate([collar, hem_specks]), heading, center),
+    0.5,
+  )
+  assert abs(scene_lib.wrap_angle(result.pose.yaw - heading)) < math.radians(5)
+  assert not result.hem_seen
+
+
+def test_split_trim_separates_hem_band_from_collar():
+  _, trim = _tshirt()
+  hem, collar = shirt_orientation.split_trim(trim)
+  assert len(hem) and len(collar)
+  assert (hem[:, 0] < -0.2).all() and (collar[:, 0] > 0.2).all()

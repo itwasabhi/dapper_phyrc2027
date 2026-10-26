@@ -2,8 +2,9 @@
 
 Cues, in the frame of a candidate heading (u toward the collar):
 - the footprint centroid sits toward the collar, where the sleeves widen the T;
-- the trim centroid sits toward the hem, whose band spans the full width while the collar
-  trim is a small V.
+- trim is split into clusters by shape: long thin ones are the hem band (the heading points away
+  from them) and compact ones the collar V (the heading points toward them). Either may be
+  missing, e.g. a hem facing away from every camera.
 The winning heading is then refined to the normal of the hem band, a long straight line of trim,
 whose ends are the shirt's bottom corners.
 """
@@ -19,8 +20,13 @@ from vision import scene as scene_lib
 @dataclasses.dataclass(frozen=True)
 class OrientationConfig:
   footprint_weight: float = 1.0
-  trim_weight: float = 1.0
-  # Below this many trim points the trim cue is skipped.
+  hem_weight: float = 1.0
+  collar_weight: float = 1.0
+  # Trim points closer than this belong to the same cluster; must exceed the grid cell size.
+  trim_link_m: float = 0.05
+  # Compact trim clusters smaller than this are specks, not the collar.
+  collar_min_points: int = 6
+  # Below this many points the hem line is not fitted.
   min_trim_points: int = 5
   # The hem band refines the heading when it is long and thin enough and close to the coarse
   # heading; otherwise the min-area rectangle axis is kept.
@@ -67,22 +73,26 @@ def estimate_orientation(
   """Picks the best of the 4 min-area-rectangle headings, then aligns it to the hem band."""
   rect = scene_lib.fit_rect(footprint_xy, confidence)
   center = np.array([rect.x, rect.y])
-  use_trim = len(trim_xy) >= config.min_trim_points
+  hem_xy, collar_xy = split_trim(trim_xy, config)
   scores = []
   for quarter in range(4):
     heading = rect.yaw + quarter * math.pi / 2
     axis = np.array([math.cos(heading), math.sin(heading)])
     half_extent = (rect.length if quarter % 2 == 0 else rect.width) / 2
-    footprint_shift = float(np.mean((footprint_xy - center) @ axis)) / half_extent
-    score = config.footprint_weight * footprint_shift
-    if use_trim:
-      trim_shift = float(np.mean((trim_xy - center) @ axis)) / half_extent
-      score -= config.trim_weight * trim_shift
+
+    def get_shift(points):
+      return float(np.mean((points - center) @ axis)) / half_extent
+
+    score = config.footprint_weight * get_shift(footprint_xy)
+    if len(hem_xy):
+      score -= config.hem_weight * get_shift(hem_xy)
+    if len(collar_xy):
+      score += config.collar_weight * get_shift(collar_xy)
     scores.append(score)
   order = np.argsort(scores)[::-1]
   best = int(order[0])
   heading = rect.yaw + best * math.pi / 2
-  hem = get_hem_line(trim_xy, center, heading, config) if use_trim else None
+  hem = get_hem_line(hem_xy, center, heading, config) if len(hem_xy) else None
   if hem is not None:
     heading = hem.heading
   axis = np.array([math.cos(heading), math.sin(heading)])
@@ -105,6 +115,43 @@ def estimate_orientation(
     hem_corners=corners,
     hem_seen=hem is not None,
   )
+
+
+def split_trim(
+  trim_xy: np.ndarray, config: OrientationConfig = OrientationConfig()
+) -> tuple[np.ndarray, np.ndarray]:
+  """Splits trim points into hem-band points (long thin clusters) and collar points (compact)."""
+  hem, collar = [np.zeros((0, 2))], [np.zeros((0, 2))]
+  for cluster in _cluster(
+    np.asarray(trim_xy, dtype=float).reshape(-1, 2), config.trim_link_m
+  ):
+    if len(cluster) < 2:
+      continue
+    eigenvalues, eigenvectors = np.linalg.eigh(np.cov(cluster.T))
+    length = float(np.ptp((cluster - cluster.mean(axis=0)) @ eigenvectors[:, 1]))
+    elongation = math.sqrt(eigenvalues[1] / max(eigenvalues[0], 1e-12))
+    if length >= config.hem_min_length_m and elongation >= config.hem_min_elongation:
+      hem.append(cluster)
+    elif length < config.hem_min_length_m and len(cluster) >= config.collar_min_points:
+      collar.append(cluster)
+  return np.concatenate(hem), np.concatenate(collar)
+
+
+def _cluster(points: np.ndarray, link_m: float) -> list[np.ndarray]:
+  """Single-linkage clusters of points within `link_m` of each other."""
+  distances = np.linalg.norm(points[:, None] - points[None], axis=-1)
+  unvisited = set(range(len(points)))
+  clusters = []
+  while unvisited:
+    frontier = [unvisited.pop()]
+    members = list(frontier)
+    while frontier:
+      neighbors = set(np.flatnonzero(distances[frontier.pop()] <= link_m)) & unvisited
+      unvisited -= neighbors
+      frontier.extend(neighbors)
+      members.extend(neighbors)
+    clusters.append(points[members])
+  return clusters
 
 
 def get_hem_line(
