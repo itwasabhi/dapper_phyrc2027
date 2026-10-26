@@ -63,7 +63,8 @@ not inline in a solution's `policy.py`.
   pose/control math.
 - Tests in `behaviors/tests/<name>_test.py`, kept minimal, with fakes instead of real models.
 - `behaviors/arm.py`: action/joint/controller_target indices, rates, and gripper kinematics measured in the sim (arm extends along base +x, fingers close along base y, wrist pitch tops out near +1.14 rad = 65 deg down). Velocity commands integrate into `controller_target`; `arm.command_to_target` sets a joint's target directly.
-- `DriveIndependent` re-plans each step around the scene's obstacles (`collision.plan_path`, a visibility graph over inflated table/manikin corners); a robot is blocked only when no path exists.
+- `behaviors/path_planning.py`: `plan_point_path` (visibility graph over inflated table/manikin corners) for `DriveIndependent`, which re-plans each step, also around the other base, and is blocked only when no path exists; `plan_formation_path` (RRT-Connect over the pair frame `(x, y, yaw)`, seeded, shortcut) for `DriveFormation`, which follows the waypoints and is blocked only when the RRT fails. The room extent is unknown, so there are no bounds.
+- `solution-test3` + `behaviors/synthetic_goals.py`: scans, then repeats independent leg, gather leg (robots side by side), formation leg, all to random obstacle-free goals preferring blocked straight paths, appending each leg's outcome (`reached`, `blocked`) to `<debug dir>/drive_legs.jsonl`.
 - `drive_to_shirt.DriveToShirtHemCorners` + `down_and_pinch.DownAndPinch` (with `shirt_grasp.get_hem_grasp_targets`): each robot stands at the side of the shirt facing across it, then lowers its tilted gripper onto a hem corner, closes, and lifts. `DownAndPinch.grasped()` reports per robot whether the fingers stopped apart (holding cloth).
 
 ### Vision and open models
@@ -83,6 +84,8 @@ Labels come only from public RGB-D, the color prior and human review, never from
 
 ### Run directories
 Scripts that produce artifacts (rollouts, `ppo.py`, `torchrl_smoke.py`, `env_preview.py`, `make_video.py`, `perception_debug.py`) write to `/output/<script_name>/<uid>/` via `utils_run_dir`. Every one accepts `--log-dir-prefix P` (dir becomes `P-<uid>`) and `--log-dir-name N` (exact name, replaces the uid; rollout scripts also need `--overwrite` to reuse it). For Hydra scripts the flags are rewritten to `log_dir_prefix=`/`log_dir_name=` overrides, which also work directly.
+
+`output/` is a git-ignored real directory of run data, some of it irreplaceable (teleop sessions). Git deletes ignored files freely when a checkout needs their path: commits up to `f12172f` track `output` as a symlink, and checking one out wiped most of `output/` once. Never check out, reset or rebase onto those commits; before any branch switch, `git diff --stat HEAD <target>` must not list `output`. Don't pass `--overwrite` unless replacing that run is intended.
 
 ### Recording rollouts
 Any script driving `DressingEnv(profile="actor_rgbd")` can record the same `policy.hdf5` as teleop (loadable with `Policy.dataset_reader.PolicyDataset`) via `utils_rollout_recorder` (see `scripts/random_rollout.py`). Pass `--write-video` (via `add_recording_flags`) to also render `<run dir>/videos/*.mp4`, or render later:

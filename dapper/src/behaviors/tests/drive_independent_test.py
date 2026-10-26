@@ -65,9 +65,33 @@ def test_done_once_every_robot_is_blocked():
   assert behavior.done()
 
 
-def test_robot_waits_while_the_other_base_is_on_its_path():
+def test_robot_detours_around_the_other_base_on_its_path():
   behavior = _make(scene_lib.SceneEstimate())
   action = behavior.step(_observation((0.0, 0.0), (2.0, 0.1)))
+  assert action[0, motion.FORWARD_COLUMN] > 0
+  assert abs(action[0, motion.LEFT_COLUMN]) > 0.1
+  assert behavior.blocked() == (False, False)
+  assert not behavior.done()
+
+
+def test_robot_waits_while_the_other_base_sits_on_its_goal():
+  behavior = _make(scene_lib.SceneEstimate())
+  action = behavior.step(_observation((0.0, 0.0), (4.0, 0.1)))
   assert np.all(action[0] == 0)
   assert behavior.blocked() == (False, False)
   assert not behavior.done()
+
+
+def test_robots_on_each_others_goals_do_not_deadlock():
+  def swap_goals(scene, base_pose):
+    del scene
+    return tuple(
+      scene_lib.Pose2D(*base_pose[1 - robot, :2], 0.0, 0.0, 0.0, 1.0)
+      for robot in range(2)
+    )
+
+  behavior = drive_independent.DriveIndependent(swap_goals)
+  behavior.reset(base.BehaviorState())
+  action = behavior.step(_observation((0.0, 0.0), (2.0, 0.0)))
+  assert action[0, motion.FORWARD_COLUMN] > 0
+  assert np.all(action[1] == 0)

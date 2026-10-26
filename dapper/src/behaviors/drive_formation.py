@@ -5,6 +5,7 @@ The pair frame has its origin at the midpoint of the two bases and the heading o
 """
 
 import dataclasses
+import math
 from typing import Callable
 
 import numpy as np
@@ -12,6 +13,7 @@ import numpy as np
 from behaviors import base
 from behaviors import collision
 from behaviors import motion
+from behaviors import path_planning
 from vision import scene as scene_lib
 
 GoalFn = Callable[[scene_lib.SceneEstimate, np.ndarray], scene_lib.Pose2D | None]
@@ -22,11 +24,14 @@ class Config:
   drive: motion.DriveConfig = motion.DriveConfig()
   formation_gain: float = 1.0  # Pulls each robot back to its slot to cancel drift.
   collision_config: collision.CollisionConfig = collision.CollisionConfig()
+  planner: path_planning.PlannerConfig = path_planning.PlannerConfig()
+  waypoint_tolerance_m: float = 0.2
+  waypoint_tolerance_rad: float = 0.2
   timeout_s: float = 60.0
 
 
 class DriveFormation:
-  """Tracks a pair-frame goal; holds if either robot's path to its final slot is blocked."""
+  """Tracks a pair-frame goal along a planned path; holds if no path keeps both bases clear."""
 
   def __init__(
     self,
@@ -40,6 +45,9 @@ class DriveFormation:
     self._state: base.BehaviorState | None = None
     self._step = 0
     self._slots: list[tuple[np.ndarray, float]] | None = None
+    self._path: list[scene_lib.Pose2D] | None = None
+    self._path_index = 0
+    self._planned_goal: scene_lib.Pose2D | None = None
     self._finished = False
     self._blocked = False
 
@@ -47,6 +55,9 @@ class DriveFormation:
     self._state = state
     self._step = 0
     self._slots = None
+    self._path = None
+    self._path_index = 0
+    self._planned_goal = None
     self._finished = False
     self._blocked = False
 
@@ -74,20 +85,33 @@ class DriveFormation:
     if self._finished:
       return action
 
-    margin = self._config.collision_config.obstacle_clearance_m
-    rects = collision.obstacles(self._state.scene)
-    goal_slots = [motion.compose(goal, *slot) for slot in self._slots]
-    self._blocked = not all(
-      collision.path_is_clear(positions[robot], goal_slots[robot][0], rects, margin)
-      for robot in range(2)
-    )
+    if self._goal_moved(goal):
+      self._path = path_planning.plan_formation_path(
+        frame,
+        goal,
+        self._slots,
+        collision.obstacles(self._state.scene),
+        self._config.collision_config.obstacle_clearance_m,
+        self._config.planner,
+      )
+      self._path_index = 0
+      self._planned_goal = goal
+    self._blocked = self._path is None
     if self._blocked:
       self._finished = True
       return action
 
+    last_index = len(self._path) - 1
+    while self._path_index < last_index and self._is_near_waypoint(
+      frame, self._path[self._path_index]
+    ):
+      self._path_index += 1
+    waypoint = self._path[self._path_index]
+    is_final = self._path_index == last_index
+
     center = np.array([frame.x, frame.y])
-    linear = drive.position_gain * (np.array([goal.x, goal.y]) - center)
-    angular = drive.yaw_gain * motion.wrap_angle(goal.yaw - frame.yaw)
+    linear = drive.position_gain * (np.array([waypoint.x, waypoint.y]) - center)
+    angular = drive.yaw_gain * motion.wrap_angle(waypoint.yaw - frame.yaw)
     commands = np.zeros((2, 3))
     for robot in range(2):
       slot_xy, slot_yaw = motion.compose(frame, *self._slots[robot])
@@ -106,12 +130,34 @@ class DriveFormation:
         left / motion.BASE_LINEAR_RATE,
         yaw_rate / motion.BASE_ANGULAR_RATE,
       ]
-    # One shared scale keeps the robots' relative motion intact when saturating.
-    commands /= max(1.0, float(np.abs(commands).max()))
+    # One shared scale keeps the robots' relative motion intact when saturating. Intermediate
+    # waypoints are driven at full speed instead of slowing at each one.
+    peak = float(np.abs(commands).max())
+    commands /= peak if not is_final and peak > 1e-6 else max(1.0, peak)
     action[:, motion.FORWARD_COLUMN] = commands[:, 0]
     action[:, motion.LEFT_COLUMN] = commands[:, 1]
     action[:, motion.YAW_COLUMN] = commands[:, 2]
     return action
+
+  def _goal_moved(self, goal: scene_lib.Pose2D) -> bool:
+    planned = self._planned_goal
+    if planned is None:
+      return True
+    drive = self._config.drive
+    return (
+      math.hypot(goal.x - planned.x, goal.y - planned.y) > drive.position_tolerance_m
+      or abs(motion.wrap_angle(goal.yaw - planned.yaw)) > drive.yaw_tolerance_rad
+    )
+
+  def _is_near_waypoint(
+    self, frame: scene_lib.Pose2D, waypoint: scene_lib.Pose2D
+  ) -> bool:
+    return (
+      math.hypot(waypoint.x - frame.x, waypoint.y - frame.y)
+      <= self._config.waypoint_tolerance_m
+      and abs(motion.wrap_angle(waypoint.yaw - frame.yaw))
+      <= self._config.waypoint_tolerance_rad
+    )
 
   def blocked(self) -> bool:
     return self._blocked

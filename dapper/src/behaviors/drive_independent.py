@@ -8,6 +8,7 @@ import numpy as np
 from behaviors import base
 from behaviors import collision
 from behaviors import motion
+from behaviors import path_planning
 from vision import scene as scene_lib
 
 GoalFn = Callable[
@@ -27,8 +28,8 @@ class DriveIndependent:
   """Drives each robot to its goal along a path around the scene's obstacles, re-planned each step.
 
   A robot with no goal holds. A robot with no obstacle-free path (e.g. a goal inside an
-  obstacle's clearance) holds and counts as finished (blocked). A robot whose next path leg
-  passes the other base waits.
+  obstacle's clearance) holds and counts as finished (blocked). A robot plans around the other
+  base, and waits only if no path avoids it.
   """
 
   def __init__(
@@ -56,39 +57,55 @@ class DriveIndependent:
     scene = self._state.scene
     goals = self._goal_fn(scene, base_pose)
     rects = collision.obstacles(scene)
-    action = np.zeros((2, 9), dtype=np.float32)
+    collision_config = self._config.collision_config
+    margin = collision_config.obstacle_clearance_m
     finished = [False, False]
     blocked = [False, False]
+    free_paths = [None, None]
+    paths = [None, None]
     for robot, goal in enumerate(goals):
-      if goal is None:
-        finished[robot] = True
-        continue
       current_xy = base_pose[robot, :2]
-      current_yaw = motion.yaw_from_base_pose(base_pose[robot])
-      if motion.within_tolerance(current_xy, current_yaw, goal, self._config.drive):
+      if goal is None or motion.within_tolerance(
+        current_xy,
+        motion.yaw_from_base_pose(base_pose[robot]),
+        goal,
+        self._config.drive,
+      ):
         finished[robot] = True
         continue
-      path = collision.plan_path(
-        current_xy,
-        np.array([goal.x, goal.y]),
-        rects,
-        self._config.collision_config.obstacle_clearance_m,
-      )
-      if path is None:
+      goal_xy = np.array([goal.x, goal.y])
+      free_path = path_planning.plan_point_path(current_xy, goal_xy, rects, margin)
+      if free_path is None:
         finished[robot] = blocked[robot] = True
         continue
-      waypoint = path[0]
-      if not collision.path_clear_of_point(
-        current_xy,
-        waypoint,
-        base_pose[1 - robot, :2],
-        self._config.collision_config.robot_clearance_m,
-      ):
+      other_obstacle = path_planning.get_robot_obstacle(
+        base_pose[1 - robot, :2], collision_config.robot_clearance_m, margin
+      )
+      paths[robot] = path_planning.plan_point_path(
+        current_xy, goal_xy, (*rects, other_obstacle), margin
+      )
+      free_paths[robot] = free_path
+    # Both held back by each other: robot 0 goes ahead so the pair cannot deadlock.
+    if (
+      free_paths[0] is not None and free_paths[1] is not None and paths == [None, None]
+    ):
+      paths[0] = free_paths[0]
+    action = np.zeros((2, 9), dtype=np.float32)
+    for robot, path in enumerate(paths):
+      if path is None:
         continue
+      goal = goals[robot]
+      current_xy = base_pose[robot, :2]
+      waypoint = path[0]
       target = scene_lib.Pose2D(
         float(waypoint[0]), float(waypoint[1]), goal.yaw, 0.0, 0.0, goal.confidence
       )
-      command = motion.drive_toward(current_xy, current_yaw, target, self._config.drive)
+      command = motion.drive_toward(
+        current_xy,
+        motion.yaw_from_base_pose(base_pose[robot]),
+        target,
+        self._config.drive,
+      )
       if len(path) > 1:
         # Keep full speed through intermediate waypoints instead of slowing at each one.
         command[:2] /= max(float(np.max(np.abs(command[:2]))), 1e-6)

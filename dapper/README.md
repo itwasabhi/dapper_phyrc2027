@@ -14,9 +14,20 @@ Setup (needed any time requirements change).
 Running common scripts: 
 ```
 dapper/run_py.sh -m pytest -p no:cacheprovider /project/dapper/src/tests -c /project/dapper/pyproject.toml
-dapper/run_sim.sh python /project/dapper/scripts/random_rollout.py --write-video --log-dir-prefix test
 dapper/run_sim.sh python /project/dapper/scripts/run_solution.py --solution-dir /project/dapper/src/solution-alpha --write-video --debug --log-dir-prefix alpha
+```
+
+Drive-planner check (`solution-test3`: scan, then synthetic independent, gather and formation legs), then plot each leg's plan vs. driven path:
+```
+dapper/run_sim.sh python /project/dapper/scripts/run_solution.py --solution-dir /project/dapper/src/solution-test3 --steps 3200 --seed 0 --log-dir-name synth-goals-pairs-seed0
+dapper/run_py.sh /project/dapper/scripts/plot_drive_legs.py /output/run_solution/synth-goals-pairs-seed0/debug /output/run_solution/synth-goals-pairs-seed0/debug/drive_legs.png
+```
+
+Debugging: 
+```
+dapper/run_sim.sh python /project/dapper/scripts/random_rollout.py --write-video --log-dir-prefix test
 dapper/run_py.sh /project/dapper/scripts/make_video.py /output/random_rollout/<uid>/policy.hdf5
+
 ```
 
 Training a behavior: 

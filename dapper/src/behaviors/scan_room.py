@@ -82,6 +82,8 @@ class ScanRoom:
     elif self._step < RAISE_STEPS + self._spin_steps:
       action[:, BASE_YAW_COLUMN] = YAW_COMMAND
     self._step += 1
+    if self._step == RAISE_STEPS + self._spin_steps:
+      self._write_scene_estimate()
     return action
 
   def done(self) -> bool:
@@ -90,5 +92,11 @@ class ScanRoom:
   def close(self) -> None:
     if self._writer and self._state is not None:
       self._writer.close()
-      out = self._debug_dir / "scene_estimate.json"
-      out.write_text(json.dumps(scene_lib.to_jsonable(self._state.scene), indent=2))
+      self._write_scene_estimate()
+
+  def _write_scene_estimate(self) -> None:
+    if self._debug_dir is None or self._state is None:
+      return
+    self._debug_dir.mkdir(parents=True, exist_ok=True)
+    out = self._debug_dir / "scene_estimate.json"
+    out.write_text(json.dumps(scene_lib.to_jsonable(self._state.scene), indent=2))

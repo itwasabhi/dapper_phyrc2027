@@ -95,11 +95,31 @@ def test_no_goal_holds_and_finishes():
   assert behavior.done()
 
 
-def test_table_on_either_robots_slot_path_holds_the_pair():
+def test_table_on_either_robots_slot_path_is_driven_around():
   poses = [(0.0, 0.5, 0.0), (0.0, -0.5, 0.0)]
   table = scene_lib.Pose2D(2.0, -0.5, 0.0, 0.5, 0.5, 1.0)  # Only robot 1's lane.
+  behavior = _make(_goal(4.0, 0.0, 0.0), scene_lib.SceneEstimate(tables=(table,)))
+  action = behavior.step(_observation(poses))
+  assert np.any(action != 0)
+  assert not behavior.blocked()
+  assert not behavior.done()
+
+
+def test_table_on_either_robots_goal_slot_holds_the_pair():
+  poses = [(0.0, 0.5, 0.0), (0.0, -0.5, 0.0)]
+  table = scene_lib.Pose2D(4.0, -0.5, 0.0, 0.5, 0.5, 1.0)  # Robot 1's final slot.
   behavior = _make(_goal(4.0, 0.0, 0.0), scene_lib.SceneEstimate(tables=(table,)))
   action = behavior.step(_observation(poses))
   assert np.all(action == 0)
   assert behavior.blocked()
   assert behavior.done()
+
+
+def test_follows_waypoints_past_a_wall_then_reaches_the_goal_direction():
+  poses = [(-3.0, 0.5, 0.0), (-3.0, -0.5, 0.0)]
+  wall = scene_lib.Pose2D(0.0, 0.0, math.pi / 2, 3.0, 0.4, 1.0)
+  behavior = _make(_goal(3.0, 0.0, 0.0), scene_lib.SceneEstimate(tables=(wall,)))
+  action = behavior.step(_observation(poses))
+  # The first leg heads off the straight line through the wall.
+  assert abs(action[0, motion.LEFT_COLUMN]) > 0.05
+  assert not behavior.blocked()

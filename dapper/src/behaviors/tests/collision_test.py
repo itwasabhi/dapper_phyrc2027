@@ -53,31 +53,3 @@ def test_start_inside_the_clearance_band_can_leave():
   start = np.array([0.0, 0.6])  # Outside the raw box, inside the 0.25 band.
   assert collision.path_is_clear(start, np.array([0.0, 3.0]), rects, 0.25)
   assert not collision.path_is_clear(start, np.array([0.0, -3.0]), rects, 0.25)
-
-
-def test_path_clear_of_point():
-  start, end = np.array([0.0, 0.0]), np.array([4.0, 0.0])
-  assert not collision.path_clear_of_point(start, end, np.array([2.0, 0.2]), 0.6)
-  assert collision.path_clear_of_point(start, end, np.array([2.0, 1.0]), 0.6)
-  # Already close at the start: exempt so two nearby robots cannot lock each other.
-  assert collision.path_clear_of_point(start, end, np.array([0.0, 0.3]), 0.6)
-
-
-def test_plan_path_is_direct_when_clear():
-  goal = np.array([3.0, 2.0])
-  path = collision.plan_path(np.array([-3.0, 2.0]), goal, (_table(),), 0.25)
-  assert len(path) == 1 and np.allclose(path[0], goal)
-
-
-def test_plan_path_goes_around_a_blocking_rect():
-  start, goal = np.array([-3.0, 0.0]), np.array([3.0, 0.0])
-  rects = (_table(),)
-  path = collision.plan_path(start, goal, rects, 0.25)
-  assert path is not None and len(path) >= 2 and np.allclose(path[-1], goal)
-  for begin, end in zip([start, *path[:-1]], path):
-    assert collision.path_is_clear(begin, end, rects, 0.25)
-
-
-def test_plan_path_returns_none_for_a_goal_inside_an_obstacle():
-  path = collision.plan_path(np.array([-3.0, 0.0]), np.zeros(2), (_table(),), 0.25)
-  assert path is None

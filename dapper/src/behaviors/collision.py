@@ -1,7 +1,6 @@
-"""Point-base collision checks and paths around the scene's rectangular obstacles."""
+"""Point-base collision checks against the scene's rectangular obstacles."""
 
 import dataclasses
-import heapq
 import math
 from typing import Sequence
 
@@ -82,77 +81,3 @@ def path_is_clear(
     if segment_hits_rect(start, end, rect, effective_margin):
       return False
   return True
-
-
-def path_clear_of_point(
-  start: np.ndarray, end: np.ndarray, point: np.ndarray, radius: float
-) -> bool:
-  """True if the segment keeps `radius` from `point`; a start already within it is exempt."""
-  start, end, point = (np.asarray(v, dtype=float) for v in (start, end, point))
-  if np.linalg.norm(point - start) < radius:
-    return True
-  segment = end - start
-  length_squared = float(segment @ segment)
-  fraction = (
-    0.0
-    if length_squared == 0.0
-    else np.clip((point - start) @ segment / length_squared, 0, 1)
-  )
-  return float(np.linalg.norm(point - (start + fraction * segment))) >= radius
-
-
-def plan_path(
-  start: np.ndarray,
-  goal: np.ndarray,
-  rects: Sequence[scene_lib.Pose2D],
-  margin: float,
-  corner_margin: float = 0.05,
-) -> list[np.ndarray] | None:
-  """Shortest waypoint list (ending at `goal`) around rects inflated by `margin`, or None.
-
-  Waypoints are corners of the rects inflated by `margin + corner_margin` (a visibility graph).
-  """
-  start, goal = np.asarray(start, dtype=float), np.asarray(goal, dtype=float)
-  if path_is_clear(start, goal, rects, margin):
-    return [goal]
-  corners = [
-    corner
-    for rect in rects
-    for corner in scene_lib.get_corners(
-      dataclasses.replace(
-        rect,
-        length=rect.length + 2 * (margin + corner_margin),
-        width=rect.width + 2 * (margin + corner_margin),
-      )
-    )
-    if not any(contains(other, corner, margin) for other in rects)
-  ]
-  nodes = [start, *corners, goal]
-  goal_index = len(nodes) - 1
-  distances = [math.inf] * len(nodes)
-  previous = [None] * len(nodes)
-  distances[0] = 0.0
-  queue = [(0.0, 0)]
-  while queue:
-    distance, index = heapq.heappop(queue)
-    if index == goal_index:
-      break
-    if distance > distances[index]:
-      continue
-    for neighbor in range(1, len(nodes)):
-      if neighbor == index or not path_is_clear(
-        nodes[index], nodes[neighbor], rects, margin
-      ):
-        continue
-      candidate = distance + float(np.linalg.norm(nodes[neighbor] - nodes[index]))
-      if candidate < distances[neighbor]:
-        distances[neighbor] = candidate
-        previous[neighbor] = index
-        heapq.heappush(queue, (candidate, neighbor))
-  if math.isinf(distances[goal_index]):
-    return None
-  path, index = [], goal_index
-  while index != 0:
-    path.append(nodes[index])
-    index = previous[index]
-  return path[::-1]

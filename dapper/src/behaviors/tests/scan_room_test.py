@@ -36,3 +36,23 @@ def test_raises_then_spins_then_holds_and_updates_state():
   while not behavior.done():
     behavior.step({})
   assert np.array_equal(behavior.step({}), np.zeros((2, 9), np.float32))
+
+
+def test_scene_estimate_is_written_when_the_scan_finishes(tmp_path):
+  class _FakeWriter:
+    def __init__(self, debug_dir, fps):
+      pass
+
+    def write(self, *args):
+      pass
+
+    def close(self):
+      pass
+
+  behavior = scan_room.ScanRoom(
+    _FakeIntegrator(), debug_dir=tmp_path, debug_writer_factory=_FakeWriter
+  )
+  behavior.reset(base.BehaviorState())
+  while not behavior.done():
+    behavior.step({"rgb": None})
+  assert (tmp_path / "scene_estimate.json").is_file()
