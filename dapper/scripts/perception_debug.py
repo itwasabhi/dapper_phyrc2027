@@ -2,7 +2,7 @@
 
 To run: 
 dapper/run_py.sh /project/dapper/scripts/perception_debug.py \
-    /output/solution_alpha/run0/policy.hdf5 --output-dir /output/perception/omdet \
+    /output/solution_alpha/<uid>/policy.hdf5 \
     --backend omdet --stride 4 [--prompt "box=white box|cardboard box" ...]
 """
 
@@ -14,26 +14,17 @@ import numpy as np
 
 from Policy import dataset_reader
 
+import utils_run_dir
 import utils_video
 from vision import debug_writer
 from vision import detector_factory
 from vision import detections as detections_lib
 
 
-def _parse_prompts(specs: list[str] | None):
-  if not specs:
-    return detections_lib.DEFAULT_PROMPTS
-  prompts = {}
-  for spec in specs:
-    class_name, _, joined = spec.partition("=")
-    prompts[class_name] = tuple(joined.split("|"))
-  return prompts
-
-
 def main() -> None:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("hdf5_path", type=pathlib.Path)
-  parser.add_argument("--output-dir", type=pathlib.Path, required=True)
+  utils_run_dir.add_log_dir_flags(parser)
   parser.add_argument(
     "--backend", choices=sorted(detector_factory.BACKENDS), default="omdet"
   )
@@ -41,16 +32,17 @@ def main() -> None:
   parser.add_argument(
     "--prompt",
     action="append",
-    help='"class=prompt1|prompt2"; repeat per class. Default: detections.DEFAULT_PROMPTS.',
+    help='"class=prompt1|prompt2"; repeat per class. Other classes keep DEFAULT_PROMPTS.',
   )
   args = parser.parse_args()
 
-  detector = detector_factory.BACKENDS[args.backend](_parse_prompts(args.prompt))
+  output_dir = utils_run_dir.log_dir_from_args("perception_debug", args)
+  detector = detector_factory.BACKENDS[args.backend](
+    detections_lib.parse_prompt_specs(args.prompt or [])
+  )
   keys = [f"{name}_rgb" for name in detections_lib.CAMERA_NAMES]
   dataset = dataset_reader.PolicyDataset(args.hdf5_path, observation_keys=keys)
-  writer = debug_writer.DebugWriter(
-    args.output_dir, utils_video.POLICY_HZ / args.stride
-  )
+  writer = debug_writer.DebugWriter(output_dir, utils_video.POLICY_HZ / args.stride)
   latencies = []
   for index in range(0, len(dataset), args.stride):
     observation, _ = dataset[index]
@@ -63,7 +55,7 @@ def main() -> None:
   dataset.close()
   print(
     f"{args.backend}: {len(latencies)} frames, median latency "
-    f"{1e3 * np.median(latencies):.1f} ms -> {args.output_dir}"
+    f"{1e3 * np.median(latencies):.1f} ms -> {output_dir}"
   )
 
 

@@ -78,3 +78,12 @@ def backproject(
   x = (cols - intrinsic[0, 2]) / intrinsic[0, 0] * z
   y = (rows - intrinsic[1, 2]) / intrinsic[1, 1] * z
   return np.stack([x, y, z], axis=1), pixel_index
+
+
+def get_world_points(
+  depth: np.ndarray, valid: np.ndarray, world_from_optical: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+  """World-frame points (N,3) of valid pixels and their flat pixel indices (N,)."""
+  points, pixel_index = backproject(depth, valid, intrinsics(depth.shape[1]))
+  world = points @ world_from_optical[:3, :3].T + world_from_optical[:3, 3]
+  return world, pixel_index

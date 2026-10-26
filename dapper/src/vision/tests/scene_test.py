@@ -30,3 +30,19 @@ def test_goals_are_none_without_estimate():
   empty = scene.SceneEstimate()
   assert scene.manikin_front_poses(empty) is None
   assert scene.shirt_approach_pose(empty, (0.0, 0.0)) is None
+
+
+def test_shirt_table_corner_poses_use_the_edge_facing_the_target():
+  table = _pose(0.0, 0.0, 0.0, length=2.0, width=1.0)
+  estimate = scene.SceneEstimate(tables=(table,), shirt_table=0)
+  poses = scene.get_shirt_table_corner_poses(estimate, toward_xy=(0.0, 5.0))
+  standoff_y = 0.5 + scene.TABLE_STANDOFF_M
+  assert sorted(pose.x for pose in poses) == pytest.approx([-1.0, 1.0])
+  for pose in poses:
+    assert pose.y == pytest.approx(standoff_y)
+    assert pose.yaw == pytest.approx(-math.pi / 2)
+
+
+def test_shirt_table_corner_poses_none_without_shirt_table():
+  estimate = scene.SceneEstimate(tables=(_pose(0.0, 0.0, 0.0),))
+  assert scene.get_shirt_table_corner_poses(estimate, (0.0, 1.0)) is None

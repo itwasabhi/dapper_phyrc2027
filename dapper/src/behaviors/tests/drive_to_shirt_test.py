@@ -39,3 +39,27 @@ def test_holds_position_when_no_shirt_was_found():
   action = behavior.step(_observation(robot_0_xy=(0.0, 0.0)))
   assert np.array_equal(action, np.zeros((2, 9), np.float32))
   assert behavior.done()
+
+
+def test_corners_send_each_robot_to_a_different_corner():
+  table = scene_lib.Pose2D(0.0, 0.0, 0.0, 2.0, 1.0, 1.0)
+  state = base.BehaviorState(
+    scene=scene_lib.SceneEstimate(
+      tables=(table,),
+      shirt_table=0,
+      manikin=scene_lib.Pose2D(0.0, 5.0, 0.0, 0.4, 0.4, 1.0),
+    )
+  )
+  # Robot 0 starts on the +x side, so it takes the +x corner.
+  goals = drive_to_shirt._get_corner_goals(
+    state.scene, _observation((1.0, 3.0), (-1.0, 3.0))["base_pose_world"]
+  )
+  assert goals[0].x > 0 > goals[1].x
+
+
+def test_corners_hold_without_a_shirt_table():
+  behavior = drive_to_shirt.DriveToShirtCorners()
+  behavior.reset(base.BehaviorState(scene=scene_lib.SceneEstimate()))
+  action = behavior.step(_observation(robot_0_xy=(0.0, 0.0)))
+  assert np.array_equal(action, np.zeros((2, 9), np.float32))
+  assert behavior.done()

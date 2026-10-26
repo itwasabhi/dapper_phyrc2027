@@ -12,6 +12,7 @@ from typing import Callable
 import numpy as np
 
 from behaviors import base
+from behaviors import motion
 from vision import debug_writer
 from vision import scene as scene_lib
 from vision import scene_integrator
@@ -19,7 +20,6 @@ from vision import scene_integrator
 BASE_YAW_COLUMN = 2
 LIFT_COLUMN = 3
 WRIST_PITCH_COLUMN = 6
-BASE_ANGULAR_RATE = 2.86
 YAW_COMMAND = 0.2
 LIFT_COMMAND = 1.0
 # Sign needed to tilt the wrist camera toward the table tops.
@@ -27,6 +27,16 @@ WRIST_PITCH_COMMAND = -1.0
 UPDATE_EVERY_N_STEPS = 4
 RAISE_STEPS = 40
 SPIN_MARGIN = 1.1
+
+
+def get_spin_steps(cfg: base.BehaviorCfg) -> int:
+  return math.ceil(
+    SPIN_MARGIN * 2 * math.pi / (YAW_COMMAND * motion.BASE_ANGULAR_RATE) * cfg.policy_hz
+  )
+
+
+def get_total_steps(cfg: base.BehaviorCfg) -> int:
+  return RAISE_STEPS + get_spin_steps(cfg)
 
 
 class ScanRoom:
@@ -43,9 +53,7 @@ class ScanRoom:
   ):
     self._integrator = integrator
     self._debug_dir = debug_dir
-    self._spin_steps = math.ceil(
-      SPIN_MARGIN * 2 * math.pi / (YAW_COMMAND * BASE_ANGULAR_RATE) * cfg.policy_hz
-    )
+    self._spin_steps = get_spin_steps(cfg)
     self._writer = (
       debug_writer_factory(debug_dir, cfg.policy_hz / UPDATE_EVERY_N_STEPS)
       if debug_dir

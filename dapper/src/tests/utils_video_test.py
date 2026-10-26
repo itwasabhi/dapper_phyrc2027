@@ -64,3 +64,12 @@ def test_stride_and_no_depth(tmp_path):
   )
   assert [p.name for p in paths] == ["demo_0_rgb.mp4"]
   assert _num_frames(paths[0]) == 3 + 1
+
+
+def test_write_contact_sheets_splits_pages(tmp_path):
+  frames = [np.full((4, 4, 3), index, np.uint8) for index in range(5)]
+  utils_video.write_contact_sheets(tmp_path, "page", frames, num_columns=2, num_rows=2)
+  assert sorted(path.name for path in tmp_path.iterdir()) == [
+    "page_000.png",
+    "page_001.png",
+  ]

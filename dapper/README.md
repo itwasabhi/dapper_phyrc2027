@@ -14,14 +14,30 @@ Setup (needed any time requirements change).
 Running common scripts: 
 ```
 dapper/run_py.sh -m pytest -p no:cacheprovider /project/dapper/src/tests -c /project/dapper/pyproject.toml
-dapper/run_sim.sh python /project/dapper/scripts/random_rollout.py --output-dir /output/random_rollout/run0 --overwrite --write-video
-dapper/run_sim.sh python /project/dapper/scripts/run_solution.py --solution-dir /project/dapper/src/solution-alpha --output-dir /output/solution_alpha/run0 --overwrite --write-video --debug
+dapper/run_sim.sh python /project/dapper/scripts/random_rollout.py --write-video --log-dir-prefix test
+dapper/run_sim.sh python /project/dapper/scripts/run_solution.py --solution-dir /project/dapper/src/solution-alpha --write-video --debug --log-dir-prefix alpha
+dapper/run_py.sh /project/dapper/scripts/make_video.py /output/random_rollout/<uid>/policy.hdf5
 ```
 
 Training a behavior: 
 ```
-dapper/run_sim.sh python /project/dapper/src/rl/scripts/ppo.py
+dapper/run_sim.sh python /project/dapper/src/rl/scripts/ppo.py --log-dir-prefix grasp ppo.total_frames=256
 ```
+
+## Force-stopping a sim run
+`run.sh` allows one sim at a time. "This repository already has an active prepare/run" means a sim container still holds `cache/runtime.lock`. Kill it (the lock releases when `docker run` exits):
+```
+docker kill $(docker ps -q --filter label=phyrc.project=PhyRC_2027)
+flock -n cache/runtime.lock -c 'echo lock free' || echo lock held
+```
+If the lock is still held, find the holder with `lsof cache/runtime.lock` and `kill` that PID.
+
+## Run directories
+Scripts that produce artifacts write to `/output/<script_name>/<uid>/` (host: `output/<script_name>/<uid>/`, gitignored). Flags accepted by all of them:
+- `--log-dir-prefix P`: directory becomes `P-<uid>`.
+- `--log-dir-name N`: exact directory name instead of a uid (rollout scripts also need `--overwrite` to reuse an existing one).
+
+For Hydra scripts (`ppo.py`, `torchrl_smoke.py`) the flags become `log_dir_prefix=` / `log_dir_name=` overrides.
 
 ## Layout
 - `src/`: library modules (`utils_*.py`), with tests in `src/tests/<module>_test.py`.

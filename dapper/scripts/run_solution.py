@@ -12,6 +12,7 @@ import sys
 
 import utils_random_rollout
 import utils_rollout_recorder
+import utils_run_dir
 import utils_solution
 import utils_video
 
@@ -27,20 +28,20 @@ def parse_args() -> argparse.Namespace:
     help="Directory containing policy.py and optionally checkpoint.*.",
   )
   parser.add_argument("--checkpoint", type=pathlib.Path)
-  parser.add_argument(
-    "--output-dir",
-    type=pathlib.Path,
-    required=True,
-    help="Where to write the trajectory; must be under /output in docker.",
-  )
+  utils_run_dir.add_log_dir_flags(parser)
   parser.add_argument(
     "--debug",
     action="store_true",
-    help="Tell the policy to write debug files (e.g. annotated frames) to <output-dir>/debug.",
+    default=True,
+    help="Tell the policy to write debug files (e.g. annotated frames) to <run dir>/debug.",
   )
-  parser.add_argument("--overwrite", action="store_true")
+  parser.add_argument(
+    "--overwrite",
+    action="store_true",
+    help="Allow --log-dir-name to replace an existing run.",
+  )
   parser.add_argument("--seed", type=int, default=0)
-  parser.add_argument("--steps", type=int, default=100, help="20 Hz steps.")
+  parser.add_argument("--steps", type=int, default=1500, help="20 Hz steps.")
   parser.add_argument("--resolution", type=int, nargs=2, metavar=("W", "H"))
   utils_rollout_recorder.add_recording_flags(parser)
   args = parser.parse_args()
@@ -53,10 +54,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
   args = parse_args()
-  utils_random_rollout.prepare_output_dir(args.output_dir, args.overwrite)
+  output_dir = utils_run_dir.log_dir_from_args("run_solution", args)
+  utils_random_rollout.prepare_output_dir(output_dir, args.overwrite)
   checkpoint = args.checkpoint or utils_solution.find_checkpoint(args.solution_dir)
   if args.debug:
-    os.environ["DAPPER_DEBUG_DIR"] = str(args.output_dir / "debug")
+    os.environ["DAPPER_DEBUG_DIR"] = str(output_dir / "debug")
 
   import policy_cli  # pylint: disable=import-outside-toplevel
 
@@ -80,9 +82,9 @@ def main() -> None:
   recorder = utils_rollout_recorder.RolloutRecorder(
     utils_rollout_recorder.open_writer(
       PROJECT_ROOT,
-      args.output_dir,
+      output_dir,
       {
-        "args": vars(args),
+        "args": {**vars(args), "log_dir": str(output_dir)},
         "source_commit": info["source_commit"],
         "source_is_dirty": info["source_is_dirty"],
       },
@@ -101,11 +103,11 @@ def main() -> None:
   if hasattr(policy, "close"):
     policy.close()
   recorder.close()
-  print(f"Wrote {recorder.num_steps} steps to {args.output_dir}")
+  print(f"Wrote {recorder.num_steps} steps to {output_dir}")
   if args.write_video:
     for path in utils_video.write_videos(
-      args.output_dir / "policy.hdf5",
-      args.output_dir / "videos",
+      output_dir / "policy.hdf5",
+      output_dir / "videos",
       stride=args.video_stride,
     ):
       print(f"Wrote {path}")

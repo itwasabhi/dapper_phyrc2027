@@ -18,3 +18,27 @@ def execute_sequence(behaviors, index, observation, state):
     index += 1
     behaviors[index].reset(state)
   return action, index
+
+
+class SequencedPolicy:
+  """Policy callable that runs `behaviors` in order via execute_sequence."""
+
+  def __init__(self, behaviors):
+    self._behaviors = behaviors
+    self._index = 0
+    self._state = None
+
+  def reset(self):
+    self._index = 0
+    self._state = create_initial_state()
+    self._behaviors[0].reset(self._state)
+
+  def __call__(self, observation):
+    action, self._index = execute_sequence(
+      self._behaviors, self._index, observation, self._state
+    )
+    return action
+
+  def close(self):
+    for behavior in self._behaviors:
+      behavior.close()

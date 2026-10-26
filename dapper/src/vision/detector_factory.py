@@ -55,11 +55,12 @@ def _make_detections(
   scores,
   labels: Sequence[str],
   prompt_classes: Mapping[str, str],
+  class_thresholds: Mapping[str, float],
 ) -> list[detections_lib.Detection]:
   detections = []
   for box, score, label in zip(boxes.tolist(), scores.tolist(), labels):
     prompt = match_prompt(label, prompt_classes)
-    if prompt is None:
+    if prompt is None or score < class_thresholds.get(prompt_classes[prompt], 0.0):
       continue
     detections.append(
       detections_lib.Detection(
@@ -71,6 +72,12 @@ def _make_detections(
       )
     )
   return detections
+
+
+def _get_model_threshold(
+  score_threshold: float, class_thresholds: Mapping[str, float]
+) -> float:
+  return min([score_threshold, *class_thresholds.values()])
 
 
 def match_prompt(label: str, prompt_classes: Mapping[str, str]) -> str | None:
@@ -88,7 +95,10 @@ def make_omdet_turbo(
   score_threshold: float = 0.3,
   nms_threshold: float = 0.3,
   device: str = "cuda",
+  class_thresholds: Mapping[str, float] = detections_lib.DEFAULT_CLASS_THRESHOLDS,
 ) -> Detector:
+  """`class_thresholds` overrides `score_threshold` per class (lower or higher)."""
+  thresholds = {name: class_thresholds.get(name, score_threshold) for name in prompts}
   prompt_classes = detections_lib.prompt_to_class(prompts)
   prompt_list = list(prompt_classes)
   processor, model = _load("omdet_turbo", models_root, device)
@@ -104,12 +114,17 @@ def make_omdet_turbo(
       outputs,
       text_labels=[prompt_list] * len(images),
       target_sizes=[image.size[::-1] for image in images],
-      threshold=score_threshold,
+      threshold=_get_model_threshold(score_threshold, thresholds),
       nms_threshold=nms_threshold,
     )
     return [
       _make_detections(
-        camera, result["boxes"], result["scores"], result["text_labels"], prompt_classes
+        camera,
+        result["boxes"],
+        result["scores"],
+        result["text_labels"],
+        prompt_classes,
+        thresholds,
       )
       for camera, result in enumerate(results)
     ]
@@ -123,7 +138,10 @@ def make_grounding_dino(
   score_threshold: float = 0.3,
   text_threshold: float = 0.25,
   device: str = "cuda",
+  class_thresholds: Mapping[str, float] = detections_lib.DEFAULT_CLASS_THRESHOLDS,
 ) -> Detector:
+  """`class_thresholds` overrides `score_threshold` per class (lower or higher)."""
+  thresholds = {name: class_thresholds.get(name, score_threshold) for name in prompts}
   prompt_classes = detections_lib.prompt_to_class(prompts)
   text = ". ".join(prompt_classes) + "."
   processor, model = _load("grounding_dino_tiny", models_root, device)
@@ -138,13 +156,18 @@ def make_grounding_dino(
     results = processor.post_process_grounded_object_detection(
       outputs,
       inputs.input_ids,
-      threshold=score_threshold,
+      threshold=_get_model_threshold(score_threshold, thresholds),
       text_threshold=text_threshold,
       target_sizes=[image.size[::-1] for image in images],
     )
     return [
       _make_detections(
-        camera, result["boxes"], result["scores"], result["text_labels"], prompt_classes
+        camera,
+        result["boxes"],
+        result["scores"],
+        result["text_labels"],
+        prompt_classes,
+        thresholds,
       )
       for camera, result in enumerate(results)
     ]

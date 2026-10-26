@@ -33,6 +33,21 @@ def tile(frames: Sequence[np.ndarray], num_columns: int = NUM_COLUMNS) -> np.nda
   return np.concatenate(rows, axis=0)
 
 
+def write_contact_sheets(
+  directory: pathlib.Path,
+  prefix: str,
+  frames: Sequence[np.ndarray],
+  num_columns: int = 8,
+  num_rows: int = 6,
+) -> None:
+  """Writes equal-size BGR frames as <prefix>_NNN.png grids of num_columns x num_rows."""
+  directory.mkdir(parents=True, exist_ok=True)
+  per_sheet = num_columns * num_rows
+  for sheet, start in enumerate(range(0, len(frames), per_sheet)):
+    image = tile(frames[start : start + per_sheet], num_columns)
+    cv2.imwrite(str(directory / f"{prefix}_{sheet:03d}.png"), image)
+
+
 def label(frame: np.ndarray, text: str) -> np.ndarray:
   frame = np.ascontiguousarray(frame)
   cv2.putText(frame, text, (4, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)

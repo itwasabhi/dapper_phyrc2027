@@ -2,6 +2,7 @@
 
 Run: dapper/run_sim.sh python /project/dapper/src/rl/scripts/ppo.py [overrides]
 Example: ... ppo.py ppo.total_frames=256 ppo.frames_per_batch=64 ppo.minibatch_size=32
+Runs land in /output/ppo/[<prefix>-]<uid>; see --log-dir-prefix / --log-dir-name.
 """
 
 import json
@@ -14,6 +15,7 @@ from hydra.core import hydra_config
 from omegaconf import OmegaConf
 import torch
 
+import utils_run_dir
 from rl import ppo_builder
 from rl.envs import factory
 
@@ -62,4 +64,5 @@ def main(config):
 
 
 if __name__ == "__main__":
+  utils_run_dir.install_hydra_support("ppo")
   main()

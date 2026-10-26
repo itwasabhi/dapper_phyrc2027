@@ -1,7 +1,7 @@
 """Rolls out random actions in DressingEnv and records it as policy.hdf5 (+ videos).
 
 Run: ./run.sh python /project/dapper/scripts/random_rollout.py \
-    --output-dir /output/random_rollout/run0 --write-video
+    --write-video [--log-dir-prefix P]
 """
 
 import argparse
@@ -11,6 +11,7 @@ import numpy as np
 
 import utils_random_rollout
 import utils_rollout_recorder
+import utils_run_dir
 import utils_video
 
 PROJECT_ROOT = pathlib.Path("/project")
@@ -18,13 +19,12 @@ PROJECT_ROOT = pathlib.Path("/project")
 
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(description=__doc__)
+  utils_run_dir.add_log_dir_flags(parser)
   parser.add_argument(
-    "--output-dir",
-    type=pathlib.Path,
-    required=True,
-    help="Where to write the trajectory; must be under /output in docker.",
+    "--overwrite",
+    action="store_true",
+    help="Allow --log-dir-name to replace an existing run.",
   )
-  parser.add_argument("--overwrite", action="store_true")
   parser.add_argument("--seed", type=int, default=0)
   parser.add_argument("--steps", type=int, default=100, help="20 Hz steps.")
   parser.add_argument("--resolution", type=int, nargs=2, metavar=("W", "H"))
@@ -47,7 +47,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
   args = parse_args()
-  utils_random_rollout.prepare_output_dir(args.output_dir, args.overwrite)
+  output_dir = utils_run_dir.log_dir_from_args("random_rollout", args)
+  utils_random_rollout.prepare_output_dir(output_dir, args.overwrite)
 
   import policy_cli  # pylint: disable=import-outside-toplevel
 
@@ -67,9 +68,9 @@ def main() -> None:
   recorder = utils_rollout_recorder.RolloutRecorder(
     utils_rollout_recorder.open_writer(
       PROJECT_ROOT,
-      args.output_dir,
+      output_dir,
       {
-        "args": vars(args),
+        "args": {**vars(args), "log_dir": str(output_dir)},
         "source_commit": info["source_commit"],
         "source_is_dirty": info["source_is_dirty"],
       },
@@ -96,11 +97,11 @@ def main() -> None:
 
   # Save before close(): it can fast-exit the process.
   recorder.close()
-  print(f"Wrote {recorder.num_steps} steps to {args.output_dir}")
+  print(f"Wrote {recorder.num_steps} steps to {output_dir}")
   if args.write_video:
     for path in utils_video.write_videos(
-      args.output_dir / "policy.hdf5",
-      args.output_dir / "videos",
+      output_dir / "policy.hdf5",
+      output_dir / "videos",
       stride=args.video_stride,
     ):
       print(f"Wrote {path}")

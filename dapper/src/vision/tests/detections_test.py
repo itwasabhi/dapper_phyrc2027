@@ -19,3 +19,19 @@ def test_to_jsonable_names_cameras():
   [record] = detections.to_jsonable([[], [], [], [detection], []])
   assert record["camera_name"] == "robot_0_head"
   assert record["class_name"] == "box"
+
+
+def test_prompt_to_class_rejects_bare_string():
+  with pytest.raises(TypeError):
+    detections.prompt_to_class({"box": "white box"})
+
+
+def test_parse_prompt_specs_overrides_one_class():
+  prompts = detections.parse_prompt_specs(["shirt=blue t-shirt|blue cloth"])
+  assert prompts["shirt"] == ("blue t-shirt", "blue cloth")
+  assert prompts["box"] == detections.DEFAULT_PROMPTS["box"]
+
+
+def test_parse_prompt_specs_rejects_missing_prompts():
+  with pytest.raises(ValueError):
+    detections.parse_prompt_specs(["shirt"])

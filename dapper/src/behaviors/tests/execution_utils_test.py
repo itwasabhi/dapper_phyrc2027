@@ -42,3 +42,15 @@ def test_execute_sequence_stays_on_the_last_behavior_once_done():
   action, index = execution_utils.execute_sequence([only], 0, {}, base.BehaviorState())
   assert action == "only"
   assert index == 0
+
+
+def test_sequenced_policy_resets_and_steps_through_behaviors():
+  first, second = (
+    _FakeBehavior("first", done_after=1),
+    _FakeBehavior("second", done_after=5),
+  )
+  policy = execution_utils.SequencedPolicy([first, second])
+  policy.reset()
+  assert first.reset_calls == 1
+  assert policy({}) == "first"
+  assert policy({}) == "second"
